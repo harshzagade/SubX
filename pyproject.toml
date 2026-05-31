@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "SubX"
+version = "0.1.0"
+description = "A fast subdomain finder tool"
+readme = "README.md"
+requires-python = ">=3.6"
+dependencies = [
+  "requests",
+  "dnspython",
+  "rich",
+  "click",
+]
+
+[project.scripts]
+subx = "subx.cli:main"
+
+[tool.setuptools]
+packages = ["subx", "subx.data"]
+
+[tool.setuptools.package-data]
+"subx.data" = ["*.txt"]
