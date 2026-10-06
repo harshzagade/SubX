@@ -6,70 +6,78 @@
   <img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square">
 </p>
 
-**SubX** is a high-performance subdomain discovery tool designed for security professionals and bug bounty hunters. It combines passive OSINT enumeration with intelligent DNS brute-forcing and multi-threaded validation.
+**SubX** is a subdomain discovery tool for security professionals and bug bounty hunters. It finds subdomains of a target domain two ways: by querying passive OSINT sources (certificate transparency logs, DNS record aggregators, threat intel), and by actively brute-forcing DNS with a wordlist. Every candidate is then validated — DNS resolution, automatic wildcard filtering, and an HTTP/HTTPS service check — and the results are shown in a rich terminal table or exported to JSON, CSV, or plain text.
 
 ---
 
 ## ✨ Key Features
 
 - **🔍 Hybrid Discovery**
-  - **Passive Enumeration:** Queries crt.sh, HackerTarget, and AlienVault OTX APIs
-  - **Active Brute-Forcing:** DNS resolution with customizable wordlists
-  - **Wildcard Detection:** Automatically filters false positives from wildcard DNS
-
-- **⚡ High Performance**
-  - Multi-threaded validation (10-100 concurrent workers)
-  - Async HTTP/HTTPS status checking
-  - Intelligent caching and connection pooling
-
+  - **Passive enumeration:** queries crt.sh, HackerTarget, and AlienVault OTX APIs in parallel
+  - **Active brute-forcing:** DNS resolution against a bundled wordlist of 84 common subdomains (or your own)
+  - **Wildcard detection:** automatically detects wildcard DNS and filters out false positives
+- **⚡ Performance**
+  - Multi-threaded validation with configurable thread count (default 10)
+  - Short-timeout HTTP/HTTPS checks (HTTPS first, then HTTP)
+  - Skip HTTP validation entirely (`--no-http`) for faster pure-DNS scans
 - **📊 Flexible Output**
-  - JSON export for automation pipelines
-  - CSV format for spreadsheet analysis
-  - Plain text for piping to other tools
-  - Rich terminal interface with progress tracking
-
-- **🛡️ Stealth & Accuracy**
-  - Random subdomain testing to detect wildcards
-  - HTTP/HTTPS service validation
-  - IP address resolution and grouping
+  - Rich terminal table with progress bars and colored status codes
+  - Export to JSON, CSV, or plain text for pipelines and further analysis
+  - Quiet mode (`-q`) prints only subdomains — perfect for piping into httpx, nuclei, etc.
+- **🛡️ Accuracy**
+  - Random-subdomain probe detects wildcard DNS before the scan starts
+  - Status per subdomain: HTTP status code, `No HTTP` (resolves, no web service), or `N/A` (HTTP checks skipped)
+  - IP address resolution and grouping per subdomain
 
 ---
 
 ## 📦 Installation
 
-### Using pipx (Recommended)
+Requires Python 3.10+ and internet access (passive sources are web APIs, and scans need DNS).
+
+### Using pipx (recommended)
 ```bash
-git clone https://github.com/HarshZagade/SubX.git
+git clone https://github.com/harshzagade/SubX.git
 cd SubX
 pipx install .
 ```
 
 ### Using pip
 ```bash
-pip install --user .
+git clone https://github.com/harshzagade/SubX.git
+cd SubX
+pip install .
 ```
+
+### From source (development)
+```bash
+git clone https://github.com/harshzagade/SubX.git
+cd SubX
+python -m venv venv
+source venv/bin/activate   # Windows: venv\Scripts\activate
+pip install -e .
+```
+
+Dependencies: `requests`, `dnspython`, `rich`, `click` (see `requirements.txt`).
 
 ---
 
 ## 🚀 Quick Start
 
-### Basic Subdomain Discovery
 ```bash
+# Full scan: passive sources + wordlist brute-force + HTTP validation
 subx example.com
-```
 
-### High-Speed Scan
-```bash
+# Faster scan: skip the HTTP service checks
 subx example.com -t 50 --no-http
-```
 
-### Save Results
-```bash
+# Passive enumeration only (quietest — no DNS brute-forcing)
+subx example.com --no-brute
+
+# Save results to a file
 subx example.com -o results.json
-```
 
-### Quiet Mode (Pipe to Other Tools)
-```bash
+# Quiet mode: only subdomains, ready to pipe into other tools
 subx example.com -q | httpx -silent
 ```
 
@@ -77,81 +85,43 @@ subx example.com -q | httpx -silent
 
 ## 📖 Usage Examples
 
-### Custom Wordlist
+### Custom wordlist
 ```bash
 subx example.com -w /path/to/wordlist.txt
 ```
 
-### Passive Enumeration Only
-```bash
-subx example.com --no-brute
-```
-
-### Active Brute-Force Only
+### Active brute-force only
 ```bash
 subx example.com --no-passive -w custom.txt
 ```
 
-### Skip HTTP Validation (Faster)
+### Passive enumeration only
+```bash
+subx example.com --no-brute
+```
+
+### Skip HTTP validation (faster, DNS-only results)
 ```bash
 subx example.com --no-http -t 100
 ```
 
-### Multiple Output Formats
+### Multiple output formats
 ```bash
-# JSON format
-subx example.com -o results.json
+subx example.com -o results.json   # JSON
+subx example.com -o results.csv    # CSV
+subx example.com -o results.txt    # plain text
+```
 
-# CSV format
-subx example.com -o results.csv
-
-# Plain text
-subx example.com -o results.txt
+### Verbose logging
+```bash
+subx example.com -v
 ```
 
 ---
 
-## 🎯 How It Works
+## 🖼️ Screenshots
 
-### 1. Wildcard Detection
-```
-SubX first checks if the target domain has wildcard DNS:
-→ Queries random.xyz123.example.com
-→ If it resolves, those IPs are marked as wildcards
-→ Future results matching wildcard IPs are filtered
-```
-
-### 2. Passive Enumeration
-```
-Queries three OSINT sources in parallel:
-├─ crt.sh (Certificate Transparency logs)
-├─ HackerTarget (DNS records)
-└─ AlienVault OTX (Threat intelligence)
-
-Combines all unique subdomains found
-```
-
-### 3. Active Brute-Forcing
-```
-For each word in wordlist:
-├─ Construct subdomain: word.example.com
-├─ Attempt DNS resolution
-├─ Check against wildcard IPs
-└─ If unique, mark as candidate
-```
-
-### 4. Validation
-```
-For each discovered subdomain:
-├─ Resolve DNS to get IP addresses
-├─ Try HTTPS connection (port 443)
-├─ If HTTPS fails, try HTTP (port 80)
-└─ Record status code and IPs
-```
-
----
-
-## 📊 Sample Output
+Real terminal output, captured from SubX v0.1.0 (`subx --help` — the only command that runs without scanning anything):
 
 ```
    _____       __   _  __   SubX v0.1.0
@@ -160,31 +130,60 @@ For each discovered subdomain:
  ___/ / /_/ / /_/ /   |  
 /____/\__,_/_.___/_/|_|  
 
-Target: example.com | Threads: 10 | HTTP: enabled
 
-14:20:15 INFO     i No wildcard detected
-         INFO     i Querying passive sources...
-14:20:25 INFO     ✓ Found 7 candidates via passive sources
-         INFO     ✓ Total unique subdomains: 7
-         INFO     i Validating candidates...
-  • Verifying... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7/7 0:00:00
+USAGE
+  $ subx [options] <domain>
 
-RESULTS
-Subdomain                         Status    Source           IP Addresses                 
-example.com                        200      Passive          172.66.147.243
-api.example.com                    200      Brute            104.20.23.154
-www.example.com                    301      Both             172.66.147.243
-mail.example.com                   200      Passive          104.20.23.154
+SCAN SETTINGS
+  -w, --wordlist          Path to custom wordlist for brute-forcing 
+  -t, --threads           Number of concurrent threads (default: 10)
 
-Finished in 12.45s. Found 4 active subdomains.
-Sources: Passive: 3, Brute: 1
+ENUMERATION CONTROL
+  --no-passive            Disable passive source discovery  
+  --no-brute              Disable wordlist brute-forcing    
+  --no-http               Skip HTTP/HTTPS service validation
+
+OUTPUT & LOGGING
+  -o, --output            Save results to file (json, csv, txt)
+  -v, --verbose           Enable detailed query logging        
+  -q, --quiet             Output only discovered subdomains    
+  --version               Show version information             
+  -h, --help              Show this help message               
+
+EXAMPLES
+  $ subx example.com
+  $ subx example.com -t 50 --no-http -o results.txt
+  $ subx example.com -q > subdomains.txt
 ```
+
+A real scan prints a rich results table with columns **Subdomain**, **Status**, **Source** (Passive / Brute / Both), and **IP Addresses**, followed by a summary line (`Finished in Xs. Found N active subdomains.`).
+
+---
+
+## 🎯 How It Works
+
+### 1. Wildcard Detection
+Before anything else, SubX resolves a random 15-character subdomain of the target. If it resolves, the domain uses wildcard DNS — those IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally.
+
+### 2. Passive Enumeration
+Three OSINT sources are queried in parallel (each with a 15-second timeout; a failed source is skipped, not fatal):
+- **crt.sh** — Certificate Transparency logs; subdomain names are validated against a strict domain regex and wildcard entries (`*.example.com`) are excluded
+- **HackerTarget** — DNS record aggregation API
+- **AlienVault OTX** — passive DNS records
+
+All unique subdomains found are combined.
+
+### 3. Active Brute-Forcing
+Each word from the wordlist is prefixed to the domain (`api.example.com`), resolved via DNS, and checked against the wildcard IP set. Subdomains found this way that were also found passively are tagged as source **Both**; otherwise **Passive** or **Brute**.
+
+### 4. Validation
+Each candidate is resolved to its A records and then probed: HTTPS first, then HTTP, with a 3-second timeout. A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned.
 
 ---
 
 ## 🔧 CLI Options
 
-```bash
+```
 usage: subx [options] <domain>
 
 positional arguments:
@@ -206,39 +205,6 @@ output & logging:
   --version            Show version information
   -h, --help           Show this help message
 ```
-
----
-
-## 🏗️ Architecture
-
-```
-subx/
-├── cli.py           # Command-line interface and argument parsing
-├── enumerator.py    # Passive OSINT and DNS brute-forcing logic
-├── validator.py     # DNS resolution and HTTP/HTTPS validation
-├── utils.py         # Terminal UI, logging, and formatting
-└── data/
-    └── default_wordlist.txt  # Built-in subdomain wordlist (84 entries)
-```
-
----
-
-## 📚 Passive Sources
-
-### crt.sh
-- Certificate Transparency logs
-- Discovers subdomains from SSL/TLS certificates
-- Historical data included
-
-### HackerTarget
-- DNS record aggregation
-- Real-time subdomain enumeration
-- Public DNS data
-
-### AlienVault OTX
-- Threat intelligence platform
-- Passive DNS records
-- Security community contributions
 
 ---
 
@@ -265,9 +231,8 @@ www.example.com,301,Both,"172.66.147.243"
 
 ### Plain Text
 ```
-api.example.com
-www.example.com
-mail.example.com
+api.example.com (200) - 104.20.23.154, 172.66.147.243
+www.example.com (301) - 172.66.147.243
 ```
 
 ---
@@ -284,48 +249,57 @@ subx example.com -q | httpx -silent -status-code
 subx example.com -q | nuclei -t vulnerabilities/
 ```
 
-### Export for Further Analysis
+### Export for further analysis
 ```bash
 subx example.com -o subs.json
-cat subs.json | jq -r '.[].subdomain' | httprobe
+jq -r '.[].subdomain' subs.json | httprobe
 ```
 
 ---
 
-## 🧪 Testing
+## 🏗️ Architecture
 
-See [TESTING_NOTES.md](./TESTING_NOTES.md) for verification details.
+```
+subx/
+├── cli.py           # Command-line interface and argument parsing
+├── enumerator.py    # Passive OSINT and DNS brute-forcing logic
+├── validator.py     # DNS resolution, wildcard detection, HTTP/HTTPS validation
+├── utils.py         # Terminal UI, logging, and formatting
+└── data/
+    └── default_wordlist.txt  # Built-in subdomain wordlist (84 entries)
+```
 
-**Note:** SubX requires internet connectivity and real domain names for testing. Localhost testing is not supported.
+Tests live in `tests/` (run with `pytest`). See [TESTING_NOTES.md](./TESTING_NOTES.md) for verification details.
+
+**Note:** SubX needs internet connectivity and a real domain to scan — localhost testing is not supported, and there is no built-in demo mode.
 
 ---
 
 ## 🛡️ Default Wordlist
 
-SubX includes a curated wordlist of 84 common subdomains:
+SubX ships with a curated wordlist of 84 common subdomains, including:
 - `www`, `mail`, `api`, `dev`, `staging`
 - `admin`, `portal`, `vpn`, `blog`, `shop`
-- And 74 more...
 
-Located at: `subx/data/default_wordlist.txt`
+Located at: `subx/data/default_wordlist.txt`. Override it with `-w /path/to/wordlist.txt`.
 
 ---
 
 ## ⚡ Performance Tips
 
-### Maximum Speed
+### Maximum speed (DNS only)
 ```bash
 subx example.com -t 100 --no-http --no-passive
 ```
 
-### Balanced Scan
+### Balanced scan
 ```bash
 subx example.com -t 50
 ```
 
-### Stealth Mode
+### Quiet passive-only enumeration
 ```bash
-subx example.com -t 5 --rate-limit 0.5
+subx example.com --no-brute -q
 ```
 
 ---
@@ -338,14 +312,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ---
 
 ## 👨‍💻 Author
 
 **Harsh Zagade**
-- GitHub: [@HarshZagade](https://github.com/HarshZagade)
+- GitHub: [@harshzagade](https://github.com/harshzagade)
 - LinkedIn: [harsh-zagade](https://linkedin.com/in/harsh-zagade)
 
 ---
