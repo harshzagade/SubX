@@ -105,6 +105,11 @@ subx example.com --no-brute
 subx example.com --no-http -t 100
 ```
 
+### Custom DNS timeout
+```bash
+subx example.com --timeout 10
+```
+
 ### Multiple output formats
 ```bash
 subx example.com -o results.json   # JSON
@@ -137,6 +142,7 @@ USAGE
 SCAN SETTINGS
   -w, --wordlist          Path to custom wordlist for brute-forcing 
   -t, --threads           Number of concurrent threads (default: 10)
+  --timeout               DNS resolution timeout in seconds (default: 5.0)
 
 ENUMERATION CONTROL
   --no-passive            Disable passive source discovery  
@@ -192,6 +198,7 @@ positional arguments:
 scan settings:
   -w, --wordlist PATH   Path to custom wordlist for brute-forcing
   -t, --threads NUM     Number of concurrent threads (default: 10)
+  --timeout SEC         DNS resolution timeout in seconds (default: 5.0)
 
 enumeration control:
   --no-passive         Disable passive source discovery

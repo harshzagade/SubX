@@ -35,13 +35,15 @@ def get_default_wordlist():
 @click.argument('domain')
 @click.option('--wordlist', '-w', type=click.Path(exists=True), help='Path to custom wordlist.')
 @click.option('--threads', '-t', default=10, help='Number of threads to use.')
+@click.option('--timeout', type=click.FloatRange(min=0.1), default=5.0, show_default=True,
+              help='DNS resolution timeout in seconds (applies to DNS lookups in all phases).')
 @click.option('--output', '-o', help='Path to output file (json, csv, or txt).')
 @click.option('--no-passive', is_flag=True, help='Skip passive enumeration.')
 @click.option('--no-brute', is_flag=True, help='Skip brute-force enumeration.')
 @click.option('--no-http', is_flag=True, help='Skip HTTP/HTTPS status check.')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, output, no_passive, no_brute, no_http, verbose, quiet):
+def main(domain, wordlist, threads, timeout, output, no_passive, no_brute, no_http, verbose, quiet):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
     
@@ -56,16 +58,16 @@ def main(domain, wordlist, threads, output, no_passive, no_brute, no_http, verbo
     # Inject logger into enumerator for verbose feedback
     enumerator.log = log
     
-    validator = Validator()
+    validator = Validator(dns_timeout=timeout)
     found_subdomains = {}  # subdomain -> source
 
     try:
         # 0. Wildcard Detection
         if not quiet:
             with console.status("[dim]Checking wildcard...[/dim]"):
-                wildcard_ips = Validator.detect_wildcard(domain)
+                wildcard_ips = validator.detect_wildcard(domain)
         else:
-            wildcard_ips = Validator.detect_wildcard(domain)
+            wildcard_ips = validator.detect_wildcard(domain)
 
         if wildcard_ips:
             log.warning(f"[bold yellow]![/bold yellow] Wildcard detected: [dim]{', '.join(wildcard_ips)}[/dim]")

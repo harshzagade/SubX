@@ -27,6 +27,7 @@ class RichHelpCommand(click.Command):
             "SCAN SETTINGS": [
                 ("-w, --wordlist", "Path to custom wordlist for brute-forcing"),
                 ("-t, --threads", "Number of concurrent threads [dim](default: 10)[/dim]"),
+                ("--timeout", "DNS resolution timeout in seconds [dim](default: 5.0)[/dim]"),
             ],
             "ENUMERATION CONTROL": [
                 ("--no-passive", "Disable passive source discovery"),

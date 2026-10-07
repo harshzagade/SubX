@@ -26,6 +26,11 @@ All notable changes to SubX are documented here. Format follows
   description of the results table format.
 
 ### Added
+- `--timeout` flag (seconds, default 5.0) to control the DNS resolution
+  timeout used in all phases (wildcard probe, brute-force, validation).
+  `Validator` now uses a dedicated `dns.resolver.Resolver` with the
+  configured `timeout`/`lifetime` instead of dnspython's global
+  defaults; non-positive values are rejected.
 - This CHANGELOG file.
 
 ## [0.1.0] — 2026-06-05
