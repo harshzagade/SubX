@@ -6,6 +6,8 @@
   <img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square">
 </p>
 
+> **In simple words:** websites are like buildings with many rooms. SubX finds all the hidden rooms — the subdomains of a site that most people never see.
+
 **SubX** is a subdomain discovery tool for security professionals and bug bounty hunters. It finds subdomains of a target domain two ways: by querying passive OSINT sources (certificate transparency logs, DNS record aggregators, threat intel), and by actively brute-forcing DNS with a wordlist. Every candidate is then validated — DNS resolution, automatic wildcard filtering, and an HTTP/HTTPS service check — and the results are shown in a rich terminal table or exported to JSON, CSV, or plain text.
 
 ---
@@ -126,41 +128,9 @@ subx example.com -v
 
 ## 🖼️ Screenshots
 
-Real terminal output, captured from SubX v0.1.0 (`subx --help` — the only command that runs without scanning anything):
+Real terminal capture from SubX v0.1.0 (`subx --help` — the only command that runs without scanning anything):
 
-```
-   _____       __   _  __   SubX v0.1.0
-  / ___/__  __/ /_ | |/ /   Advanced Subdomain Discovery
-  \__ \/ / / / __ \|   /    by Harsh Zagade
- ___/ / /_/ / /_/ /   |  
-/____/\__,_/_.___/_/|_|  
-
-
-USAGE
-  $ subx [options] <domain>
-
-SCAN SETTINGS
-  -w, --wordlist          Path to custom wordlist for brute-forcing 
-  -t, --threads           Number of concurrent threads (default: 10)
-  --timeout               DNS resolution timeout in seconds (default: 5.0)
-
-ENUMERATION CONTROL
-  --no-passive            Disable passive source discovery  
-  --no-brute              Disable wordlist brute-forcing    
-  --no-http               Skip HTTP/HTTPS service validation
-
-OUTPUT & LOGGING
-  -o, --output            Save results to file (json, csv, txt)
-  -v, --verbose           Enable detailed query logging        
-  -q, --quiet             Output only discovered subdomains    
-  --version               Show version information             
-  -h, --help              Show this help message               
-
-EXAMPLES
-  $ subx example.com
-  $ subx example.com -t 50 --no-http -o results.txt
-  $ subx example.com -q > subdomains.txt
-```
+![SubX --help](assets/screenshots/help.png)
 
 A real scan prints a rich results table with columns **Subdomain**, **Status**, **Source** (Passive / Brute / Both), and **IP Addresses**, followed by a summary line (`Finished in Xs. Found N active subdomains.`).
 

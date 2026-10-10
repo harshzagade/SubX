@@ -5,6 +5,11 @@ All notable changes to SubX are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+- "In simple words" plain-language intro line at the top of the README.
+- Real terminal screenshot of `subx --help` (`assets/screenshots/help.png`),
+  replacing the old text-block capture.
+
 ### Fixed
 - Corrected the Python version requirement in the README (badge and
   installation note said 3.10+, but the code uses no 3.7+ features and
