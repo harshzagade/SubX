@@ -6,6 +6,9 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Fixed
+- Corrected the Python version requirement in the README (badge and
+  installation note said 3.10+, but the code uses no 3.7+ features and
+  `pyproject.toml` declares `>=3.6`). Both now say Python 3.6+.
 - Corrected README claims that did not match the code: removed a
   non-existent `--rate-limit` flag from examples, removed claims of
   async HTTP checks and connection pooling (validation is

@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Version-0.1.0-blue.svg?style=flat-square">
-  <img src="https://img.shields.io/badge/Python-3.10%2B-yellow.svg?style=flat-square">
+  <img src="https://img.shields.io/badge/Python-3.6%2B-yellow.svg?style=flat-square">
   <img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square">
 </p>
 
@@ -33,7 +33,7 @@
 
 ## 📦 Installation
 
-Requires Python 3.10+ and internet access (passive sources are web APIs, and scans need DNS).
+Requires Python 3.6+ and internet access (passive sources are web APIs, and scans need DNS).
 
 ### Using pipx (recommended)
 ```bash
