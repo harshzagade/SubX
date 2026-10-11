@@ -14,6 +14,7 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, MofNCompleteColumn
 from .enumerator import Enumerator
 from .validator import Validator
+from .results import dedupe_results, sort_results
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
 
@@ -175,7 +176,11 @@ def main(domain, wordlist, threads, timeout, output, no_passive, no_brute, no_ht
         # 4. Results Display
         duration = time.time() - start_time
         if results:
-            results.sort()
+            # Collapse spelling variants of the same DNS host (letter case,
+            # trailing dot) into one row, then sort deterministically, so the
+            # table, quiet output, and saved files (-o) all show the same
+            # clean, ordered list.
+            results = sort_results(dedupe_results(results))
             
             if quiet:
                 for sub, status, source, ips in results:

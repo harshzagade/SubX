@@ -6,6 +6,13 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Dedupe + deterministic sort of results before display and file output
+  (new `subx/results.py`): rows naming the same DNS host in different
+  spellings (letter case, trailing dot) are collapsed into one row per
+  host — merged rows keep the most informative status, the combined
+  source label, and the union of observed IPs — and rows are sorted by
+  subdomain so the table, `-q` output, and saved files (`-o`) all show
+  the same clean, ordered list. 17 new unit tests.
 - "In simple words" plain-language intro line at the top of the README.
 - Real terminal screenshot of `subx --help` (`assets/screenshots/help.png`),
   replacing the old text-block capture.

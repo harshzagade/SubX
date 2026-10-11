@@ -187,6 +187,11 @@ output & logging:
 
 ## 🎨 Output Formats
 
+Before display or saving, results are deduplicated (spelling variants of
+the same DNS host, e.g. letter case or a trailing dot, are collapsed into
+one row) and sorted by subdomain, so the table, quiet output, and saved
+files all show the same clean list.
+
 ### JSON
 ```json
 [
