@@ -155,6 +155,31 @@ Each word from the wordlist is prefixed to the domain (`api.example.com`), resol
 ### 4. Validation
 Each candidate is resolved to its A records and then probed: HTTPS first, then HTTP, with a 3-second timeout. A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned.
 
+### Wildcard-domain behavior in detail
+
+- **Detection:** before scanning, SubX resolves one random 15-character
+  subdomain (A record only) of the target. If it resolves, the target is
+  wildcard DNS and those IPs are recorded; a yellow `Wildcard detected`
+  warning shows them. If it does not resolve, a blue `No wildcard
+  detected` note is printed and scanning continues normally.
+- **Filtering rule:** a candidate is dropped as a false positive only
+  when **every** IP it resolves to is in the wildcard set. A subdomain
+  that resolves to a mix of wildcard and unique IPs is **kept** — real
+  services frequently sit behind the same CDN or load balancer as the
+  wildcard, so partial matches are not filtered.
+- **On a full-wildcard target** (every name resolves to the same IPs),
+  brute-forcing adds little signal: passive enumeration still finds real
+  named hosts from certificate logs, and `--no-brute` keeps the scan
+  quiet and fast. The yellow wildcard warning is your cue that results
+  passed through the filter.
+- **Caveats:** the probe is a single A-record lookup, so CNAME-based
+  wildcards are not detected, and a one-off anycast fluke could in rare
+  cases flip the filter for a whole scan. Subdomains dropped by the
+  filter never reach the results table or output files.
+- **Summary:** when the filter drops candidates, the end-of-scan summary
+  reports the count (e.g. `Filtered 37 wildcard false positive(s).`), so
+  a filtered scan does not look identical to a clean one.
+
 ---
 
 ## 🔧 CLI Options

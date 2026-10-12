@@ -225,6 +225,8 @@ def main(domain, wordlist, threads, timeout, output, no_passive, no_brute, no_ht
                 
                 console.print(f"\n[dim]Finished in {duration:.2f}s. Found {len(results)} active subdomains.[/dim]")
                 console.print(f"[dim]Sources: {', '.join(summary_items)}[/dim]")
+                if validator.wildcard_filtered:
+                    console.print(f"[dim]Filtered {validator.wildcard_filtered} wildcard false positive(s).[/dim]")
 
             # 5. Output to file
             if output:

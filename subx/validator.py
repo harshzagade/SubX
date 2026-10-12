@@ -2,6 +2,7 @@ import dns.resolver
 import requests
 import random
 import string
+import threading
 
 class Validator:
     #: Timeout (seconds) applied to every DNS query when the caller
@@ -15,6 +16,10 @@ class Validator:
         if dns_timeout <= 0:
             raise ValueError("dns_timeout must be positive")
         self.dns_timeout = dns_timeout
+        # How many candidates were dropped as wildcard false positives.
+        # Incremented from worker threads, so updates are serialized.
+        self.wildcard_filtered = 0
+        self._filter_lock = threading.Lock()
         # A dedicated resolver so the timeout is configurable per scan
         # instead of relying on dnspython's global default resolver.
         self.resolver = dns.resolver.Resolver()
@@ -41,6 +46,8 @@ class Validator:
             
             # If all resolved IPs are in the wildcard set, it's likely a false positive
             if self.wildcard_ips and all(ip in self.wildcard_ips for ip in ips):
+                with self._filter_lock:
+                    self.wildcard_filtered += 1
                 return None
 
             if not check_http:
