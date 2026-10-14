@@ -6,6 +6,13 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--http-timeout SEC` CLI flag: the 3-second HTTP/HTTPS probe timeout
+  in the validation phase is now configurable (`Validator(http_timeout=...)`,
+  default 3.0, values below 0.1 rejected like `--timeout`). Useful for
+  slow targets (raise it) or fast noisy scans (lower it). README CLI
+  options and How-It-Works updated; 5 new stub-based unit tests
+  (default, custom, validation, timeout actually passed to
+  `requests.get` on both the HTTPS and HTTP attempts).
 - CNAME following in the DNS validation phase: candidates that are only
   a CNAME record (e.g. pointing at a CDN) are followed up to 5 hops --
   loops are cut at the first repeated name -- and the final target's A

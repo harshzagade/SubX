@@ -103,6 +103,35 @@ class TestValidator(unittest.TestCase):
         with self.assertRaises(ValueError):
             Validator(dns_timeout=-1)
 
+    def test_http_timeout_default(self):
+        v = Validator()
+        self.assertEqual(v.http_timeout, Validator.DEFAULT_HTTP_TIMEOUT)
+        self.assertEqual(v.http_timeout, 3.0)
+
+    def test_http_timeout_custom(self):
+        v = Validator(http_timeout=9.5)
+        self.assertEqual(v.http_timeout, 9.5)
+
+    def test_http_timeout_rejects_non_positive(self):
+        with self.assertRaises(ValueError):
+            Validator(http_timeout=0)
+        with self.assertRaises(ValueError):
+            Validator(http_timeout=-1)
+
+    @patch(RESOLVE_TARGET)
+    @patch('subx.validator.requests')
+    def test_validate_passes_http_timeout_to_requests(self, mock_requests, mock_resolve):
+        mock_resolve.side_effect = _resolve_router()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_requests.get.return_value = mock_response
+
+        v = Validator(http_timeout=7.5)
+        v.validate("sub.example.com")
+        mock_requests.get.assert_called_once()
+        _, kwargs = mock_requests.get.call_args
+        self.assertEqual(kwargs["timeout"], 7.5)
+
     @patch(RESOLVE_TARGET)
     def test_validate_uses_configured_resolver(self, mock_resolve):
         mock_resolve.side_effect = _resolve_router()

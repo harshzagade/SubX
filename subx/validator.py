@@ -8,18 +8,26 @@ class Validator:
     #: Timeout (seconds) applied to every DNS query when the caller
     #: does not pass an explicit value.
     DEFAULT_DNS_TIMEOUT = 5.0
+    #: Timeout (seconds) for each HTTP/HTTPS probe request when the
+    #: caller does not pass an explicit value.
+    DEFAULT_HTTP_TIMEOUT = 3.0
     #: Maximum CNAME hops followed before resolving A records. Chains
     #: longer than this stop at the last reachable name; loops are cut
     #: at the first repeated name.
     MAX_CNAME_DEPTH = 5
 
-    def __init__(self, wildcard_ips=None, dns_timeout=None):
+    def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
         if dns_timeout <= 0:
             raise ValueError("dns_timeout must be positive")
         self.dns_timeout = dns_timeout
+        if http_timeout is None:
+            http_timeout = self.DEFAULT_HTTP_TIMEOUT
+        if http_timeout <= 0:
+            raise ValueError("http_timeout must be positive")
+        self.http_timeout = http_timeout
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -117,7 +125,7 @@ class Validator:
                 try:
                     url = f"{protocol}://{subdomain}"
                     # Use a short timeout to keep it fast
-                    response = requests.get(url, timeout=3, allow_redirects=True, verify=False)
+                    response = requests.get(url, timeout=self.http_timeout, allow_redirects=True, verify=False)
 
                     # Consider it "working" if it returns a success or redirect code
                     if 200 <= response.status_code < 400:

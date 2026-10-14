@@ -153,7 +153,7 @@ All unique subdomains found are combined.
 Each word from the wordlist is prefixed to the domain (`api.example.com`), resolved via DNS, and checked against the wildcard IP set. Subdomains found this way that were also found passively are tagged as source **Both**; otherwise **Passive** or **Brute**.
 
 ### 4. Validation
-Each candidate is resolved to its A records and then probed: HTTPS first, then HTTP, with a 3-second timeout. A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned.
+Each candidate is resolved to its A records and then probed: HTTPS first, then HTTP, with a 3-second timeout (configurable via `--http-timeout`). A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned.
 
 **CNAME aliases are followed, not dropped.** If a candidate is only a CNAME record (e.g. pointing at a CDN or a cloud load balancer), SubX follows the chain — up to 5 hops, loops cut at the first repeated name — and resolves the final target's A records, so the alias is no longer reported as a miss. The first CNAME target is reported in the results table's `CNAME` column (and in JSON/CSV/text output), while the HTTP probe still targets the original subdomain so the Host header and TLS SNI stay correct.
 
@@ -196,6 +196,7 @@ scan settings:
   -w, --wordlist PATH   Path to custom wordlist for brute-forcing
   -t, --threads NUM     Number of concurrent threads (default: 10)
   --timeout SEC         DNS resolution timeout in seconds (default: 5.0)
+  --http-timeout SEC    Timeout in seconds for each HTTP/HTTPS probe request (default: 3.0)
 
 enumeration control:
   --no-passive         Disable passive source discovery
