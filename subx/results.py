@@ -1,13 +1,14 @@
 """Result post-processing for SubX: dedupe and deterministic sorting.
 
-Rows produced by the validation phase are (subdomain, status, source, ips)
-tuples, collected from threads in arbitrary order. The same DNS host can
-appear more than once with different spellings -- letter case (passive
-sources lowercase, the target domain may not) or a trailing dot -- because
-DNS is case-insensitive and the collection dict keys on exact strings.
-This module collapses those spelling variants into a single row per host
-and sorts rows deterministically, so the results table, quiet output, and
-the saved files (-o/--output) all show one clean, ordered list.
+Rows produced by the validation phase are (subdomain, status, source,
+ips, cname) tuples, collected from threads in arbitrary order. The same
+DNS host can appear more than once with different spellings -- letter
+case (passive sources lowercase, the target domain may not) or a
+trailing dot -- because DNS is case-insensitive and the collection dict
+keys on exact strings. This module collapses those spelling variants
+into a single row per host and sorts rows deterministically, so the
+results table, quiet output, and the saved files (-o/--output) all show
+one clean, ordered list.
 """
 
 
@@ -72,19 +73,20 @@ def dedupe_results(results):
     """Collapse rows that name the same DNS host into a single row.
 
     The merged row uses the canonical (normalized) subdomain, the most
-    informative status, the combined source label, and the union of
-    observed IP addresses.
+    informative status, the combined source label, the union of
+    observed IP addresses, and the first non-empty CNAME alias seen.
     """
     merged = {}
-    for sub, status, source, ips in results:
+    for sub, status, source, ips, cname in results:
         key = normalize_subdomain(sub)
         existing = merged.get(key)
         if existing is None:
-            merged[key] = [key, status, source, ips]
+            merged[key] = [key, status, source, ips, cname]
             continue
         existing[1] = _prefer_status(existing[1], status)
         existing[2] = merge_sources(existing[2], source)
         existing[3] = _merge_ips(existing[3], ips)
+        existing[4] = existing[4] or cname
     return [tuple(row) for row in merged.values()]
 
 

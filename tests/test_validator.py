@@ -6,6 +6,28 @@ import dns.resolver
 RESOLVE_TARGET = 'dns.resolver.Resolver.resolve'
 
 
+def _resolve_router(cname_target=None, a_ips=('1.2.3.4',)):
+    """Build a resolve() side effect that answers per record type.
+
+    CNAME queries raise NoAnswer when ``cname_target`` is None (like a
+    real resolver for a name with no CNAME record); A queries return
+    the given IPs.
+    """
+    def side_effect(name, rdtype, *args, **kwargs):
+        if str(rdtype).upper() == 'CNAME':
+            if cname_target is None:
+                raise dns.resolver.NoAnswer
+            answer = MagicMock()
+            rdata = MagicMock()
+            rdata.target = cname_target
+            answer.__iter__.return_value = [rdata]
+            return answer
+        answer = MagicMock()
+        answer.__iter__.return_value = list(a_ips)
+        return answer
+    return side_effect
+
+
 class TestValidator(unittest.TestCase):
     def setUp(self):
         self.validator = Validator()
@@ -31,19 +53,30 @@ class TestValidator(unittest.TestCase):
     @patch(RESOLVE_TARGET)
     @patch('requests.get')
     def test_validate_success(self, mock_get, mock_resolve):
-        # Mock DNS
-        mock_answer = MagicMock()
-        mock_answer.__iter__.return_value = ['1.2.3.4']
-        mock_resolve.return_value = mock_answer
+        # Mock DNS (no CNAME record on the name)
+        mock_resolve.side_effect = _resolve_router()
 
         # Mock HTTP
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_get.return_value = mock_response
 
-        ips, status = self.validator.validate("sub.example.com")
+        ips, status, alias = self.validator.validate("sub.example.com")
         self.assertEqual(ips, ['1.2.3.4'])
         self.assertEqual(status, 200)
+        self.assertIsNone(alias)
+
+    @patch(RESOLVE_TARGET)
+    def test_validate_follows_cname(self, mock_resolve):
+        # A CNAME-only name must resolve through to the target's A records
+        # and report the alias.
+        mock_resolve.side_effect = _resolve_router(
+            cname_target='cdn.provider.net', a_ips=('203.0.113.9',))
+
+        ips, status, alias = self.validator.validate("cdn.example.com", check_http=False)
+        self.assertEqual(ips, ['203.0.113.9'])
+        self.assertEqual(status, "N/A")
+        self.assertEqual(alias, 'cdn.provider.net')
 
     @patch(RESOLVE_TARGET)
     def test_validate_no_dns(self, mock_resolve):
@@ -72,9 +105,7 @@ class TestValidator(unittest.TestCase):
 
     @patch(RESOLVE_TARGET)
     def test_validate_uses_configured_resolver(self, mock_resolve):
-        mock_answer = MagicMock()
-        mock_answer.__iter__.return_value = ['1.2.3.4']
-        mock_resolve.return_value = mock_answer
+        mock_resolve.side_effect = _resolve_router()
 
         v = Validator(dns_timeout=7)
         v.validate("sub.example.com", check_http=False)

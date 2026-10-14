@@ -145,8 +145,8 @@ def main(domain, wordlist, threads, timeout, output, no_passive, no_brute, no_ht
             sub, source = sub_source
             val = validator.validate(sub, check_http=not no_http)
             if val:
-                ips, status = val
-                return (sub, str(status), source, ", ".join(ips))
+                ips, status, alias = val
+                return (sub, str(status), source, ", ".join(ips), alias or "")
             return None
 
         if not quiet:
@@ -183,7 +183,7 @@ def main(domain, wordlist, threads, timeout, output, no_passive, no_brute, no_ht
             results = sort_results(dedupe_results(results))
             
             if quiet:
-                for sub, status, source, ips in results:
+                for sub, status, source, ips, alias in results:
                     console.print(sub)
             else:
                 table = Table(
@@ -198,8 +198,9 @@ def main(domain, wordlist, threads, timeout, output, no_passive, no_brute, no_ht
                 table.add_column("Status", justify="center", min_width=10)
                 table.add_column("Source", style="dim white", min_width=15)
                 table.add_column("IP Addresses", style="dim green")
-                
-                for sub, status, source, ips in results:
+                table.add_column("CNAME", style="dim cyan")
+
+                for sub, status, source, ips, alias in results:
                     # Colorize status
                     status_styled = status
                     if status == "200":
@@ -213,13 +214,13 @@ def main(domain, wordlist, threads, timeout, output, no_passive, no_brute, no_ht
                     else:
                         status_styled = f"[bold red]{status}[/bold red]"
                     
-                    table.add_row(sub, status_styled, source, ips)
+                    table.add_row(sub, status_styled, source, ips, alias or "")
                 
                 console.print("\n[bold white]RESULTS[/bold white]")
                 console.print(table)
                 
                 source_counts = {}
-                for _, _, source, _ in results:
+                for _, _, source, _, _ in results:
                     source_counts[source] = source_counts.get(source, 0) + 1
                 summary_items = [f"{s}: {c}" for s, c in source_counts.items()]
                 
@@ -232,18 +233,21 @@ def main(domain, wordlist, threads, timeout, output, no_passive, no_brute, no_ht
             if output:
                 try:
                     if output.endswith('.json'):
-                        data = [{"subdomain": r[0], "status": r[1], "source": r[2], "ips": r[3]} for r in results]
+                        data = [{"subdomain": r[0], "status": r[1], "source": r[2], "ips": r[3], "cname": r[4] or None} for r in results]
                         with open(output, 'w') as f:
                             json.dump(data, f, indent=4)
                     elif output.endswith('.csv'):
                         with open(output, 'w', newline='') as f:
                             writer = csv.writer(f)
-                            writer.writerow(["Subdomain", "Status", "Source", "IP Addresses"])
+                            writer.writerow(["Subdomain", "Status", "Source", "IP Addresses", "CNAME"])
                             writer.writerows(results)
                     else:
                         with open(output, 'w') as f:
                             for r in results:
-                                f.write(f"{r[0]} ({r[1]}) - {r[3]}\n")
+                                line = f"{r[0]} ({r[1]}) - {r[3]}"
+                                if r[4]:
+                                    line += f" -> {r[4]}"
+                                f.write(line + "\n")
                     log.info(f"Results saved to [bold underline]{output}[/bold underline]")
                 except Exception as e:
                     log.error(f"Error saving output: {e}")

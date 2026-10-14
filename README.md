@@ -155,6 +155,8 @@ Each word from the wordlist is prefixed to the domain (`api.example.com`), resol
 ### 4. Validation
 Each candidate is resolved to its A records and then probed: HTTPS first, then HTTP, with a 3-second timeout. A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned.
 
+**CNAME aliases are followed, not dropped.** If a candidate is only a CNAME record (e.g. pointing at a CDN or a cloud load balancer), SubX follows the chain — up to 5 hops, loops cut at the first repeated name — and resolves the final target's A records, so the alias is no longer reported as a miss. The first CNAME target is reported in the results table's `CNAME` column (and in JSON/CSV/text output), while the HTTP probe still targets the original subdomain so the Host header and TLS SNI stay correct.
+
 ### Wildcard-domain behavior in detail
 
 - **Detection:** before scanning, SubX resolves one random 15-character

@@ -3,8 +3,10 @@
 dnspython may not be installed where the suite runs, so these tests stub
 the ``dns``/``dns.resolver``/``dns.exception`` modules instead of mocking
 a real resolver. The stub drives ``Validator`` with a fixed
-name -> [IPs] map, which is enough to exercise the wildcard filtering
-logic, the counter, and its thread safety.
+name -> [IPs] map (plus an optional name -> [CNAME targets] map, where a
+missing entry raises ``NoAnswer`` just like a real resolver when a name
+carries no CNAME record), which is enough to exercise the wildcard
+filtering logic, the counter, and its thread safety.
 """
 
 import sys
@@ -17,7 +19,7 @@ _WILDCARD_IP = "203.0.113.10"
 _REAL_IP = "198.51.100.23"
 
 
-def _install_dns_stub(resolve_map):
+def _install_dns_stub(resolve_map, cname_map=None):
     dns = types.ModuleType("dns")
     resolver_mod = types.ModuleType("dns.resolver")
     exception_mod = types.ModuleType("dns.exception")
@@ -41,6 +43,12 @@ def _install_dns_stub(resolve_map):
         def __str__(self):
             return self._ip
 
+    class FakeCnameRdata:
+        """Mimics dnspython CNAME rdata, which exposes ``.target``."""
+
+        def __init__(self, target):
+            self.target = target
+
     class FakeResolver:
         def __init__(self):
             self.timeout = None
@@ -48,6 +56,13 @@ def _install_dns_stub(resolve_map):
 
         def resolve(self, name, rdtype):
             key = str(name).rstrip(".").lower()
+            if str(rdtype).upper() == "CNAME":
+                targets = (cname_map or {}).get(key)
+                if targets:
+                    return [FakeCnameRdata(t) for t in targets]
+                # A name without a CNAME record answers NOERROR with an
+                # empty answer section: dnspython raises NoAnswer.
+                raise NoAnswer(key)
             if key in resolve_map:
                 return [FakeRdata(ip) for ip in resolve_map[key]]
             raise NXDOMAIN(key)
@@ -70,12 +85,12 @@ def _install_dns_stub(resolve_map):
 
 @pytest.fixture()
 def validator_factory():
-    def make(resolve_map, wildcard_ips=None, **kwargs):
+    def make(resolve_map, wildcard_ips=None, cname_map=None, **kwargs):
         # Install the stub before importing subx.validator: the module
         # does `import dns.resolver` at import time and keeps the module
         # object in its globals, so reload it whenever the stub changes
         # to rebind to the current resolve_map.
-        _install_dns_stub(resolve_map)
+        _install_dns_stub(resolve_map, cname_map)
         import importlib
 
         import subx.validator
@@ -105,8 +120,9 @@ def test_mixed_ips_are_kept(validator_factory):
     )
     result = v.validate("mix.example.com", check_http=False)
     assert result is not None
-    ips, status = result
+    ips, status, alias = result
     assert _REAL_IP in ips
+    assert alias is None
     assert v.wildcard_filtered == 0
 
 

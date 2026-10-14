@@ -6,6 +6,18 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- CNAME following in the DNS validation phase: candidates that are only
+  a CNAME record (e.g. pointing at a CDN) are followed up to 5 hops --
+  loops are cut at the first repeated name -- and the final target's A
+  records are resolved, instead of the alias being dropped as a miss.
+  `validate()` now returns `(ips, status, alias)`; the first CNAME
+  target is reported in a new `CNAME` column in the results table and
+  in JSON (`cname`), CSV, and text output, and flows through the
+  dedupe/sort step (first non-empty alias wins on merge). The HTTP probe
+  still targets the original subdomain so Host/TLS SNI stay correct,
+  and the wildcard filter applies to the final target IPs. 9 new
+  stub-based unit tests (chain, loop, depth cap, NXDOMAIN target,
+  wildcard interplay, probe-target check).
 - Wildcard-filter visibility: `Validator` now counts candidates dropped
   as wildcard false positives (`wildcard_filtered`, thread-safe) and the
   end-of-scan summary reports the count, so filtered scans are visible
