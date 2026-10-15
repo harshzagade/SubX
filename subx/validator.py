@@ -2,7 +2,39 @@ import dns.resolver
 import requests
 import random
 import string
+import re
 import threading
+
+#: ASCII hostname check applied after punycode conversion, so garbage
+#: input (spaces, empty labels) fails fast instead of hitting DNS.
+_ASCII_HOSTNAME_RE = re.compile(
+    r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
+)
+
+
+def to_ascii_domain(name):
+    """Convert a domain name to its ASCII (punycode) form.
+
+    Uses only the stdlib ``idna`` codec, so internationalized targets
+    resolve instead of erroring out -- no extra dependency needed.
+    Lowercases the name, strips a trailing dot, and validates the
+    result as an ASCII hostname. Raises ``ValueError`` on empty input,
+    unencodable labels, or anything that is not a valid hostname.
+
+    Conversion is idempotent: already-ASCII names pass through
+    unchanged (aside from lowercasing).
+    """
+    name = name.strip().rstrip(".").lower()
+    if not name:
+        raise ValueError("domain name is empty")
+    try:
+        labels = [label.encode("idna").decode("ascii") for label in name.split(".")]
+    except UnicodeError as e:
+        raise ValueError(f"cannot encode {name!r} as punycode: {e}")
+    ascii_name = ".".join(labels)
+    if not _ASCII_HOSTNAME_RE.match(ascii_name):
+        raise ValueError(f"{ascii_name!r} is not a valid domain name")
+    return ascii_name
 
 class Validator:
     #: Timeout (seconds) applied to every DNS query when the caller
@@ -68,6 +100,7 @@ class Validator:
 
     def detect_wildcard(self, domain):
         """Detect if the domain has a wildcard DNS record."""
+        domain = to_ascii_domain(domain)
         random_sub = ''.join(random.choices(string.ascii_lowercase + string.digits, k=15))
         try:
             full_domain = f"{random_sub}.{domain}"
@@ -128,10 +161,14 @@ class Validator:
         the first CNAME target seen (``None`` when the name has no
         CNAME record). Returns ``None`` when the name does not resolve.
 
+        Internationalized names are converted to punycode first, so
+        unicode targets resolve instead of erroring out.
+
         The HTTP probe always targets the original ``subdomain`` (so
         the Host header and TLS SNI stay correct), not the CNAME
         target.
         """
+        subdomain = to_ascii_domain(subdomain)
         try:
             # Follow any CNAME chain first, then resolve A records on
             # the final name. Timeouts on either query are retried

@@ -6,8 +6,16 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
-- Retry-on-timeout policy for DNS queries: a single `dns.resolver.Timeout`
-  no longer kills a brute-force candidate -- every DNS lookup (CNAME
+- IDN/punycode support: unicode targets like `münchen.de` are converted
+  to `xn--mnchen-3ya.de` before any DNS query, using only the stdlib
+  `idna` codec (no new dependency). New `to_ascii_domain()` in
+  `validator.py` lowercases, strips the trailing dot, and validates the
+  ASCII form as a hostname (fail-fast `ValueError` on invalid input);
+  the CLI converts the target up front and notes the conversion, and
+  `Validator.validate()`/`detect_wildcard()` convert defensively for
+  direct library callers. 13 new tests (conversion rules, punycode
+  actually queried via the DNS stub).
+- Retry-on-timeout policy for DNS queries: a single `dns.resolver.Timeout`  no longer kills a brute-force candidate -- every DNS lookup (CNAME
   probe, A records, wildcard probe) is retried up to `--dns-retries`
   times (default 1, `Validator(dns_retries=...)`; 0 disables, only
   non-negative integers accepted). Definitive answers (NXDOMAIN,

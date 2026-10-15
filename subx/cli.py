@@ -13,7 +13,7 @@ except ImportError:
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, MofNCompleteColumn
 from .enumerator import Enumerator
-from .validator import Validator
+from .validator import Validator, to_ascii_domain
 from .results import dedupe_results, sort_results
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
@@ -51,7 +51,19 @@ def get_default_wordlist():
 def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, no_passive, no_brute, no_http, verbose, quiet):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
-    
+
+    # Normalize the target up front: internationalized names become
+    # punycode (stdlib only, no extra dependency) so every downstream
+    # DNS query, passive-source URL, and result row uses the ASCII form.
+    original_domain = domain
+    try:
+        domain = to_ascii_domain(domain)
+    except ValueError as e:
+        console.print(f"[bold red]Invalid target domain:[/bold red] {e}")
+        sys.exit(2)
+    if domain != original_domain.lower():
+        log.info(f"[bold blue]i[/bold blue] IDN target converted to punycode: [white]{domain}[/white]")
+
     if not quiet:
         console.print(LOGO)
         console.print()

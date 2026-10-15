@@ -117,6 +117,13 @@ subx example.com --timeout 10
 subx example.com --dns-retries 2   # retry each timed-out DNS query twice (default: 1)
 ```
 
+### Internationalized domain names
+```bash
+subx münchen.de   # converted to xn--mnchen-3ya.de (punycode) automatically
+```
+Unicode targets are normalized with the stdlib IDNA codec before any
+DNS query, so internationalized domains scan without erroring out.
+
 ### Multiple output formats
 ```bash
 subx example.com -o results.json   # JSON
