@@ -6,6 +6,14 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Retry-on-timeout policy for DNS queries: a single `dns.resolver.Timeout`
+  no longer kills a brute-force candidate -- every DNS lookup (CNAME
+  probe, A records, wildcard probe) is retried up to `--dns-retries`
+  times (default 1, `Validator(dns_retries=...)`; 0 disables, only
+  non-negative integers accepted). Definitive answers (NXDOMAIN,
+  NoAnswer) still fail fast on the first attempt and are never retried.
+  5 new stub-based unit tests (timeout-then-success, exhausted retries,
+  NXDOMAIN not retried, zero disables, invalid values rejected).
 - `--http-timeout SEC` CLI flag: the 3-second HTTP/HTTPS probe timeout
   in the validation phase is now configurable (`Validator(http_timeout=...)`,
   default 3.0, values below 0.1 rejected like `--timeout`). Useful for

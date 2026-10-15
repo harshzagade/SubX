@@ -40,13 +40,15 @@ def get_default_wordlist():
               help='DNS resolution timeout in seconds (applies to DNS lookups in all phases).')
 @click.option('--http-timeout', type=click.FloatRange(min=0.1), default=3.0, show_default=True,
               help='Timeout in seconds for each HTTP/HTTPS probe request during validation.')
+@click.option('--dns-retries', type=click.IntRange(min=0), default=1, show_default=True,
+              help='Retry attempts per DNS query after a timeout before a candidate is dropped.')
 @click.option('--output', '-o', help='Path to output file (json, csv, or txt).')
 @click.option('--no-passive', is_flag=True, help='Skip passive enumeration.')
 @click.option('--no-brute', is_flag=True, help='Skip brute-force enumeration.')
 @click.option('--no-http', is_flag=True, help='Skip HTTP/HTTPS status check.')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, output, no_passive, no_brute, no_http, verbose, quiet):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, no_passive, no_brute, no_http, verbose, quiet):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
     
@@ -61,7 +63,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, output, no_passive, n
     # Inject logger into enumerator for verbose feedback
     enumerator.log = log
     
-    validator = Validator(dns_timeout=timeout, http_timeout=http_timeout)
+    validator = Validator(dns_timeout=timeout, http_timeout=http_timeout,
+                        dns_retries=dns_retries)
     found_subdomains = {}  # subdomain -> source
 
     try:

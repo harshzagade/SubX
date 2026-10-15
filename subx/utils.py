@@ -28,6 +28,8 @@ class RichHelpCommand(click.Command):
                 ("-w, --wordlist", "Path to custom wordlist for brute-forcing"),
                 ("-t, --threads", "Number of concurrent threads [dim](default: 10)[/dim]"),
                 ("--timeout", "DNS resolution timeout in seconds [dim](default: 5.0)[/dim]"),
+                ("--http-timeout", "HTTP probe timeout in seconds [dim](default: 3.0)[/dim]"),
+                ("--dns-retries", "Retry attempts per DNS query after a timeout [dim](default: 1)[/dim]"),
             ],
             "ENUMERATION CONTROL": [
                 ("--no-passive", "Disable passive source discovery"),

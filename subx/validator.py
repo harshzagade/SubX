@@ -16,7 +16,13 @@ class Validator:
     #: at the first repeated name.
     MAX_CNAME_DEPTH = 5
 
-    def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None):
+    #: Number of extra attempts after a ``dns.resolver.Timeout`` before a
+    #: DNS query is treated as a miss. Only timeouts are retried: NXDOMAIN,
+    #: NoAnswer and other definitive answers fail fast on the first try.
+    DEFAULT_DNS_RETRIES = 1
+
+    def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
+                 dns_retries=None):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -28,6 +34,11 @@ class Validator:
         if http_timeout <= 0:
             raise ValueError("http_timeout must be positive")
         self.http_timeout = http_timeout
+        if dns_retries is None:
+            dns_retries = self.DEFAULT_DNS_RETRIES
+        if not isinstance(dns_retries, int) or dns_retries < 0:
+            raise ValueError("dns_retries must be a non-negative integer")
+        self.dns_retries = dns_retries
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -38,12 +49,29 @@ class Validator:
         self.resolver.timeout = dns_timeout
         self.resolver.lifetime = dns_timeout
 
+    def _resolve(self, name, rdtype):
+        """Resolve ``name``/``rdtype`` with retry on timeout.
+
+        A single dropped packet or slow authoritative server should not
+        kill a candidate during brute-force, so ``dns.resolver.Timeout``
+        is retried up to ``dns_retries`` times. Definitive answers
+        (NXDOMAIN, NoAnswer, other DNSErrors) are never retried and
+        propagate immediately.
+        """
+        last_error = None
+        for _ in range(self.dns_retries + 1):
+            try:
+                return self.resolver.resolve(name, rdtype)
+            except dns.resolver.Timeout as e:
+                last_error = e
+        raise last_error
+
     def detect_wildcard(self, domain):
         """Detect if the domain has a wildcard DNS record."""
         random_sub = ''.join(random.choices(string.ascii_lowercase + string.digits, k=15))
         try:
             full_domain = f"{random_sub}.{domain}"
-            answers = self.resolver.resolve(full_domain, 'A')
+            answers = self._resolve(full_domain, 'A')
             ips = {str(ip) for ip in answers}
             return ips
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.Timeout, dns.exception.DNSException):
@@ -77,7 +105,7 @@ class Validator:
         current = name
         for _ in range(self.MAX_CNAME_DEPTH):
             try:
-                answers = self.resolver.resolve(current, "CNAME")
+                answers = self._resolve(current, "CNAME")
             except dns.resolver.NoAnswer:
                 break  # No CNAME here; A records live on `current`.
             target = self._cname_target(answers)
@@ -106,9 +134,10 @@ class Validator:
         """
         try:
             # Follow any CNAME chain first, then resolve A records on
-            # the final name.
+            # the final name. Timeouts on either query are retried
+            # before the candidate is treated as a miss.
             final_name, alias = self.resolve_cnames(subdomain)
-            answers = self.resolver.resolve(final_name, 'A')
+            answers = self._resolve(final_name, 'A')
             ips = [str(ip) for ip in answers]
 
             # If all resolved IPs are in the wildcard set, it's likely a false positive

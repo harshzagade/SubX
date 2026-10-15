@@ -112,6 +112,11 @@ subx example.com --no-http -t 100
 subx example.com --timeout 10
 ```
 
+### Retry flaky DNS queries
+```bash
+subx example.com --dns-retries 2   # retry each timed-out DNS query twice (default: 1)
+```
+
 ### Multiple output formats
 ```bash
 subx example.com -o results.json   # JSON
@@ -197,6 +202,7 @@ scan settings:
   -t, --threads NUM     Number of concurrent threads (default: 10)
   --timeout SEC         DNS resolution timeout in seconds (default: 5.0)
   --http-timeout SEC    Timeout in seconds for each HTTP/HTTPS probe request (default: 3.0)
+  --dns-retries NUM     Retry attempts per DNS query after a timeout (default: 1)
 
 enumeration control:
   --no-passive         Disable passive source discovery
