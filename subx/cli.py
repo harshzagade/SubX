@@ -14,6 +14,7 @@ from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn, MofNCompleteColumn
 from .enumerator import Enumerator
 from .validator import Validator, to_ascii_domain
+from .filters import parse_exclude_patterns, excluded_subdomain
 from .results import dedupe_results, sort_results
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
@@ -45,10 +46,12 @@ def get_default_wordlist():
 @click.option('--output', '-o', help='Path to output file (json, csv, or txt).')
 @click.option('--no-passive', is_flag=True, help='Skip passive enumeration.')
 @click.option('--no-brute', is_flag=True, help='Skip brute-force enumeration.')
+@click.option('--exclude-sub', multiple=True,
+              help='Glob pattern to skip brute-force candidates (e.g. "*.blog.*"); repeatable.')
 @click.option('--no-http', is_flag=True, help='Skip HTTP/HTTPS status check.')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, no_passive, no_brute, no_http, verbose, quiet):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, no_passive, no_brute, exclude_sub, no_http, verbose, quiet):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -110,6 +113,19 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
             except Exception as e:
                 log.error(f"[bold red]✗[/bold red] Error reading wordlist: {e}")
                 words = []
+
+            if exclude_sub:
+                try:
+                    exclude_patterns = parse_exclude_patterns(exclude_sub)
+                except ValueError as e:
+                    log.error(f"[bold red]✗[/bold red] Invalid --exclude-sub pattern: {e}")
+                    sys.exit(2)
+                before = len(words)
+                words = [w for w in words
+                         if not excluded_subdomain(f"{w}.{domain}", exclude_patterns)]
+                skipped = before - len(words)
+                if skipped:
+                    log.info(f"[dim]Skipped {skipped} brute-force candidate(s) matching --exclude-sub[/dim]")
 
             if words:
                 log.info(f"[bold blue]i[/bold blue] Brute-forcing with [white]{len(words)}[/white] words...")

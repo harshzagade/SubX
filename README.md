@@ -164,6 +164,8 @@ All unique subdomains found are combined.
 ### 3. Active Brute-Forcing
 Each word from the wordlist is prefixed to the domain (`api.example.com`), resolved via DNS, and checked against the wildcard IP set. Subdomains found this way that were also found passively are tagged as source **Both**; otherwise **Passive** or **Brute**.
 
+On noisy targets, `--exclude-sub PATTERN` (repeatable) skips brute-force candidates matching the glob — e.g. `--exclude-sub '*.blog.*'` drops everything under any `blog` subdomain before any DNS query is made. Patterns are matched against the full candidate name, case-insensitively; an invalid (empty) pattern fails fast with exit code 2. The flag applies to brute-force only, not passive candidates.
+
 ### 4. Validation
 Each candidate is resolved to its A records and then probed: HTTPS first, then HTTP, with a 3-second timeout (configurable via `--http-timeout`). A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned.
 
@@ -218,6 +220,7 @@ scan settings:
 enumeration control:
   --no-passive         Disable passive source discovery
   --no-brute           Disable wordlist brute-forcing
+  --exclude-sub GLOB   Skip brute-force candidates matching the glob (repeatable)
   --no-http            Skip HTTP/HTTPS service validation
 
 output & logging:
@@ -290,6 +293,7 @@ jq -r '.[].subdomain' subs.json | httprobe
 subx/
 ├── cli.py           # Command-line interface and argument parsing
 ├── enumerator.py    # Passive OSINT and DNS brute-forcing logic
+├── filters.py       # --exclude-sub glob matching (stdlib-only)
 ├── validator.py     # DNS resolution, wildcard detection, HTTP/HTTPS validation
 ├── utils.py         # Terminal UI, logging, and formatting
 └── data/

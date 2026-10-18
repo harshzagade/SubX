@@ -34,6 +34,7 @@ class RichHelpCommand(click.Command):
             "ENUMERATION CONTROL": [
                 ("--no-passive", "Disable passive source discovery"),
                 ("--no-brute", "Disable wordlist brute-forcing"),
+                ("--exclude-sub", "Skip brute-force candidates matching a glob [dim](repeatable)[/dim]"),
                 ("--no-http", "Skip HTTP/HTTPS service validation"),
             ],
             "OUTPUT & LOGGING": [

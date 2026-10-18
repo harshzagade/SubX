@@ -15,6 +15,15 @@ All notable changes to SubX are documented here. Format follows
   subdomains for the whole scan. New `_probe_random_name()` helper and
   7 stub-based unit tests (agreement, disagreement, fluke, timeout,
   overlap). README "How It Works" + wildcard-behavior section updated.
+- `--exclude-sub PATTERN` CLI flag (repeatable): skip brute-force
+  candidates matching a glob before any DNS query is made -- e.g.
+  `--exclude-sub '*.blog.*'` drops everything under noisy `blog`
+  subtrees. Patterns match the full candidate subdomain,
+  case-insensitively; empty patterns fail fast with exit 2; the count
+  skipped is logged. Applies to brute-force only, not passive
+  candidates. New stdlib-only `subx/filters.py`
+  (`parse_exclude_patterns()`/`excluded_subdomain()`) with 9 unit
+  tests; README How-It-Works updated.
 - IDN/punycode support: unicode targets like `münchen.de` are converted
   to `xn--mnchen-3ya.de` before any DNS query, using only the stdlib
   `idna` codec (no new dependency). New `to_ascii_domain()` in
