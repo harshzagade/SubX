@@ -53,6 +53,14 @@ class Validator:
     #: NoAnswer and other definitive answers fail fast on the first try.
     DEFAULT_DNS_RETRIES = 1
 
+    #: Number of independent random subdomains probed by
+    #: :meth:`detect_wildcard`. A single probe can hit an anycast fluke
+    #: -- one random name resolving to an unrelated anycast IP -- which
+    #: would poison ``wildcard_ips`` and filter out real candidates for
+    #: the whole scan. Two probes must resolve AND agree before the
+    #: domain is treated as wildcarded.
+    WILDCARD_PROBES = 2
+
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
                  dns_retries=None):
         self.wildcard_ips = wildcard_ips or set()
@@ -98,17 +106,48 @@ class Validator:
                 last_error = e
         raise last_error
 
-    def detect_wildcard(self, domain):
-        """Detect if the domain has a wildcard DNS record."""
-        domain = to_ascii_domain(domain)
-        random_sub = ''.join(random.choices(string.ascii_lowercase + string.digits, k=15))
+    @staticmethod
+    def _random_label(length=15):
+        """Generate one random lowercase/digit subdomain label."""
+        return ''.join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+    def _probe_random_name(self, domain):
+        """Resolve a single random subdomain of ``domain``.
+
+        Returns the set of A-record IPs, or an empty set when the name
+        does not resolve -- NXDOMAIN, NoAnswer, timeouts, and other DNS
+        errors all just mean "no wildcard answer for this name".
+        """
+        full_domain = f"{self._random_label()}.{domain}"
         try:
-            full_domain = f"{random_sub}.{domain}"
             answers = self._resolve(full_domain, 'A')
-            ips = {str(ip) for ip in answers}
-            return ips
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.resolver.Timeout, dns.exception.DNSException):
+            return {str(ip) for ip in answers}
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+                dns.resolver.Timeout, dns.exception.DNSException):
             return set()
+
+    def detect_wildcard(self, domain):
+        """Detect if the domain has a wildcard DNS record.
+
+        Probes :attr:`WILDCARD_PROBES` independent random subdomains and
+        declares a wildcard only when at least two probes resolve AND
+        their answers agree on at least one IP. A lone resolving probe
+        (an anycast fluke) is ignored, so a single stray answer can no
+        longer poison ``wildcard_ips`` and filter out genuine subdomains
+        for the rest of the scan.
+
+        Returns the agreed-upon wildcard IP set -- empty when the domain
+        is not wildcarded or the probes disagree.
+        """
+        domain = to_ascii_domain(domain)
+        hits = []
+        for _ in range(self.WILDCARD_PROBES):
+            ips = self._probe_random_name(domain)
+            if ips:
+                hits.append(ips)
+        if len(hits) < 2:
+            return set()
+        return set.intersection(*hits)
 
     @staticmethod
     def _cname_target(answers):

@@ -27,7 +27,7 @@
   - Export to JSON, CSV, or plain text for pipelines and further analysis
   - Quiet mode (`-q`) prints only subdomains — perfect for piping into httpx, nuclei, etc.
 - **🛡️ Accuracy**
-  - Random-subdomain probe detects wildcard DNS before the scan starts
+  - Two random-subdomain probes detect wildcard DNS before the scan starts
   - Status per subdomain: HTTP status code, `No HTTP` (resolves, no web service), or `N/A` (HTTP checks skipped)
   - IP address resolution and grouping per subdomain
 
@@ -151,7 +151,7 @@ A real scan prints a rich results table with columns **Subdomain**, **Status**, 
 ## 🎯 How It Works
 
 ### 1. Wildcard Detection
-Before anything else, SubX resolves a random 15-character subdomain of the target. If it resolves, the domain uses wildcard DNS — those IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally.
+Before anything else, SubX probes two random 15-character subdomains of the target. A wildcard is declared only when at least two probes resolve AND agree on at least one IP — a single resolving probe is treated as an anycast fluke and ignored, so one stray answer can no longer poison the filter for the whole scan. The agreed wildcard IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally.
 
 ### 2. Passive Enumeration
 Three OSINT sources are queried in parallel (each with a 15-second timeout; a failed source is skipped, not fatal):
@@ -171,11 +171,13 @@ Each candidate is resolved to its A records and then probed: HTTPS first, then H
 
 ### Wildcard-domain behavior in detail
 
-- **Detection:** before scanning, SubX resolves one random 15-character
-  subdomain (A record only) of the target. If it resolves, the target is
-  wildcard DNS and those IPs are recorded; a yellow `Wildcard detected`
-  warning shows them. If it does not resolve, a blue `No wildcard
-  detected` note is printed and scanning continues normally.
+- **Detection:** before scanning, SubX probes two random 15-character
+  subdomains (A records only) of the target. The target is treated as
+  wildcard DNS only when **both** probes resolve **and** their answers
+  agree on at least one IP; a lone resolving probe (an anycast fluke)
+  is ignored. A yellow `Wildcard detected` warning shows the agreed
+  IPs; if the probes do not agree, a blue `No wildcard detected` note
+  is printed and scanning continues normally.
 - **Filtering rule:** a candidate is dropped as a false positive only
   when **every** IP it resolves to is in the wildcard set. A subdomain
   that resolves to a mix of wildcard and unique IPs is **kept** — real
@@ -186,10 +188,12 @@ Each candidate is resolved to its A records and then probed: HTTPS first, then H
   named hosts from certificate logs, and `--no-brute` keeps the scan
   quiet and fast. The yellow wildcard warning is your cue that results
   passed through the filter.
-- **Caveats:** the probe is a single A-record lookup, so CNAME-based
-  wildcards are not detected, and a one-off anycast fluke could in rare
-  cases flip the filter for a whole scan. Subdomains dropped by the
-  filter never reach the results table or output files.
+- **Caveats:** the probes are A-record lookups, so CNAME-based
+  wildcards are not detected. Wildcards whose answers rotate per
+  query (round-robin sinks returning disjoint IP sets per probe) will
+  not be declared, since the probes must share at least one IP.
+  Subdomains dropped by the filter never reach the results table or
+  output files.
 - **Summary:** when the filter drops candidates, the end-of-scan summary
   reports the count (e.g. `Filtered 37 wildcard false positive(s).`), so
   a filtered scan does not look identical to a clean one.

@@ -6,6 +6,15 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Two-probe wildcard detection: `detect_wildcard()` now probes two
+  independent random subdomains (`Validator.WILDCARD_PROBES`) and
+  declares a wildcard only when at least two probes resolve AND agree
+  on at least one IP (the agreed intersection becomes `wildcard_ips`).
+  A lone resolving probe -- an anycast fluke -- is ignored, so one
+  stray answer can no longer poison the filter and drop genuine
+  subdomains for the whole scan. New `_probe_random_name()` helper and
+  7 stub-based unit tests (agreement, disagreement, fluke, timeout,
+  overlap). README "How It Works" + wildcard-behavior section updated.
 - IDN/punycode support: unicode targets like `münchen.de` are converted
   to `xn--mnchen-3ya.de` before any DNS query, using only the stdlib
   `idna` codec (no new dependency). New `to_ascii_domain()` in
