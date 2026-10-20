@@ -6,6 +6,21 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Per-FQDN DNS resolution cache in `Validator`: the brute-force phase
+  validates every wordlist candidate and the validation phase then
+  re-validates all hits, so every brute-force hit used to be resolved
+  twice (CNAME chain + A records). Resolved IPs and the CNAME alias are
+  now cached per normalized name via the new `_cached_dns()` helper, so
+  the validation phase reuses the brute-force phase's DNS work; dead
+  names are cached too, while DNS timeouts are deliberately never
+  cached (transient -- retried fresh next time). The wildcard filter
+  still runs on every call against the cached IPs, so mid-scan updates
+  of `wildcard_ips` are honored. Lookups and counter updates are
+  thread-safe for the worker pools; `Validator.dns_cache_hits` tracks
+  cache servings and the scan summary reports them. 7 stub-based unit
+  tests (cache reuse, dead-name caching, timeout exclusion,
+  wildcard-filter interplay, thread safety); README How-It-Works
+  updated.
 - Two-probe wildcard detection: `detect_wildcard()` now probes two
   independent random subdomains (`Validator.WILDCARD_PROBES`) and
   declares a wildcard only when at least two probes resolve AND agree

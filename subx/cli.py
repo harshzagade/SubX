@@ -261,6 +261,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
                 console.print(f"[dim]Sources: {', '.join(summary_items)}[/dim]")
                 if validator.wildcard_filtered:
                     console.print(f"[dim]Filtered {validator.wildcard_filtered} wildcard false positive(s).[/dim]")
+                if validator.dns_cache_hits:
+                    console.print(f"[dim]Reused {validator.dns_cache_hits} cached DNS result(s) across phases.[/dim]")
 
             # 5. Output to file
             if output:

@@ -11,6 +11,11 @@ _ASCII_HOSTNAME_RE = re.compile(
     r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$"
 )
 
+#: Sentinel stored in ``Validator._dns_cache`` for names that
+#: definitively did not resolve. A dedicated object (not ``None``)
+#: distinguishes "looked up, found nothing" from "never looked up".
+_DNS_MISS = object()
+
 
 def to_ascii_domain(name):
     """Convert a domain name to its ASCII (punycode) form.
@@ -83,6 +88,21 @@ class Validator:
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
         self._filter_lock = threading.Lock()
+        # Per-FQDN cache of DNS resolution results, keyed by the
+        # normalized (punycode, lowercased) name. The brute-force phase
+        # validates every wordlist candidate, and the validation phase
+        # then re-validates all hits -- without this cache every
+        # brute-force hit is resolved twice (CNAME chain + A records).
+        # Values are (ips, alias) tuples on success; _DNS_MISS marks a
+        # name that definitively did not resolve. Timeouts are never
+        # cached: they are transient, so the next phase retries them
+        # fresh instead of inheriting a stale miss.
+        self._dns_cache = {}
+        self._cache_lock = threading.Lock()
+        # How many validations were served from the cache instead of
+        # hitting DNS. Updated under _cache_lock; reported in the scan
+        # summary.
+        self.dns_cache_hits = 0
         # A dedicated resolver so the timeout is configurable per scan
         # instead of relying on dnspython's global default resolver.
         self.resolver = dns.resolver.Resolver()
@@ -190,6 +210,51 @@ class Validator:
             current = target
         return current, alias
 
+    def _cached_dns(self, subdomain):
+        """Resolve ``subdomain``'s CNAME chain and A records, using the cache.
+
+        The first validation of a name performs the DNS work -- CNAME
+        chain following plus A-record lookup -- and stores the outcome
+        keyed by the normalized name. Later validations of the same
+        name skip DNS entirely and reuse the stored result, which is
+        what saves the validation phase from re-resolving every
+        brute-force hit from scratch.
+
+        Definitive misses (NXDOMAIN, NoAnswer, other DNSErrors) are
+        cached too, since a dead name stays dead for the length of a
+        scan. ``Timeout`` is deliberately NOT cached: it is transient,
+        so a later phase retries the lookup fresh instead of reusing a
+        stale miss.
+
+        Returns ``(ips, alias)``. Raises the usual dnspython exceptions
+        on resolution failure, exactly as an uncached lookup would.
+        """
+        with self._cache_lock:
+            cached = self._dns_cache.get(subdomain)
+        if cached is not None:
+            with self._cache_lock:
+                self.dns_cache_hits += 1
+            if cached is _DNS_MISS:
+                raise dns.resolver.NXDOMAIN(subdomain)
+            return cached
+        # Resolve without holding the lock so concurrent validations of
+        # different names are not serialized. Every writer stores the
+        # same deterministic data, so last-write-wins is safe.
+        try:
+            final_name, alias = self.resolve_cnames(subdomain)
+            answers = self._resolve(final_name, 'A')
+            result = ([str(ip) for ip in answers], alias)
+        except dns.resolver.Timeout:
+            raise  # Transient: never cached, retried fresh next time.
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+                dns.exception.DNSException):
+            with self._cache_lock:
+                self._dns_cache[subdomain] = _DNS_MISS
+            raise
+        with self._cache_lock:
+            self._dns_cache[subdomain] = result
+        return result
+
     def validate(self, subdomain, check_http=True):
         """Check if a subdomain resolves and optionally has a working web service.
 
@@ -203,18 +268,23 @@ class Validator:
         Internationalized names are converted to punycode first, so
         unicode targets resolve instead of erroring out.
 
+        DNS resolution results (CNAME chain + A records) are cached per
+        FQDN: validating the same name twice -- as the brute-force and
+        validation phases do -- performs the DNS lookups only once. The
+        HTTP probe is not cached and always runs fresh.
+
         The HTTP probe always targets the original ``subdomain`` (so
         the Host header and TLS SNI stay correct), not the CNAME
         target.
         """
         subdomain = to_ascii_domain(subdomain)
         try:
-            # Follow any CNAME chain first, then resolve A records on
-            # the final name. Timeouts on either query are retried
-            # before the candidate is treated as a miss.
-            final_name, alias = self.resolve_cnames(subdomain)
-            answers = self._resolve(final_name, 'A')
-            ips = [str(ip) for ip in answers]
+            # CNAME chain + A records come from the per-FQDN cache, so
+            # the validation phase reuses the brute-force phase's DNS
+            # work instead of repeating it. The wildcard filter below
+            # still runs on every call against the cached IPs, so a
+            # mid-scan update of wildcard_ips is always honored.
+            ips, alias = self._cached_dns(subdomain)
 
             # If all resolved IPs are in the wildcard set, it's likely a false positive
             if self.wildcard_ips and all(ip in self.wildcard_ips for ip in ips):

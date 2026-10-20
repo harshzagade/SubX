@@ -171,6 +171,8 @@ Each candidate is resolved to its A records and then probed: HTTPS first, then H
 
 **CNAME aliases are followed, not dropped.** If a candidate is only a CNAME record (e.g. pointing at a CDN or a cloud load balancer), SubX follows the chain — up to 5 hops, loops cut at the first repeated name — and resolves the final target's A records, so the alias is no longer reported as a miss. The first CNAME target is reported in the results table's `CNAME` column (and in JSON/CSV/text output), while the HTTP probe still targets the original subdomain so the Host header and TLS SNI stay correct.
 
+**DNS results are cached per FQDN across phases.** Brute-forcing validates every wordlist candidate, and the validation phase then re-validates all hits — without a cache, every brute-force hit would be resolved twice (CNAME chain + A records). The `Validator` keeps a per-name cache of the resolved IPs and CNAME alias, so the validation phase reuses the brute-force phase's DNS work instead of repeating it; dead names are cached too, and DNS timeouts are never cached (they are retried fresh, since they are transient). The scan summary reports how many lookups were served from the cache.
+
 ### Wildcard-domain behavior in detail
 
 - **Detection:** before scanning, SubX probes two random 15-character
