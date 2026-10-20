@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeEl
 from .enumerator import Enumerator
 from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
-from .results import dedupe_results, sort_results
+from .results import dedupe_results, sort_results, filter_live_results
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
 
@@ -49,11 +49,17 @@ def get_default_wordlist():
 @click.option('--exclude-sub', multiple=True,
               help='Glob pattern to skip brute-force candidates (e.g. "*.blog.*"); repeatable.')
 @click.option('--no-http', is_flag=True, help='Skip HTTP/HTTPS status check.')
+@click.option('--only-live', is_flag=True,
+              help='Show only subdomains with a working HTTP service (hide DNS-only rows).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, no_passive, no_brute, exclude_sub, no_http, verbose, quiet):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
+
+    if only_live and no_http:
+        console.print("[bold red]--only-live requires the HTTP check; remove --no-http.[/bold red]")
+        sys.exit(2)
 
     # Normalize the target up front: internationalized names become
     # punycode (stdlib only, no extra dependency) so every downstream
@@ -214,7 +220,14 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
             # table, quiet output, and saved files (-o) all show the same
             # clean, ordered list.
             results = sort_results(dedupe_results(results))
-            
+
+            if only_live:
+                live_total = len(results)
+                results = filter_live_results(results)
+                hidden = live_total - len(results)
+                if hidden:
+                    log.info(f"[dim]--only-live: hid {hidden} DNS-only row(s); showing {len(results)} live.[/dim]")
+
             if quiet:
                 for sub, status, source, ips, alias in results:
                     console.print(sub)

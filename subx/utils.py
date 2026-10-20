@@ -36,6 +36,7 @@ class RichHelpCommand(click.Command):
                 ("--no-brute", "Disable wordlist brute-forcing"),
                 ("--exclude-sub", "Skip brute-force candidates matching a glob [dim](repeatable)[/dim]"),
                 ("--no-http", "Skip HTTP/HTTPS service validation"),
+                ("--only-live", "Show only subdomains with a working HTTP service"),
             ],
             "OUTPUT & LOGGING": [
                 ("-o, --output", "Save results to file [dim](json, csv, txt)[/dim]"),

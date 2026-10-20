@@ -6,6 +6,15 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--only-live` CLI flag: show only subdomains with a working HTTP
+  service -- rows with `No HTTP`/`N/A` status are hidden from the
+  table, quiet (`-q`) output, and saved `-o` files, which is what
+  recon pipelines want when feeding into httpx/nuclei. The filter
+  runs after dedupe/sort (so merged rows keep their best status), the
+  hidden count is logged, and combining it with `--no-http` fails
+  fast with exit 2. New `is_live_status()`/`filter_live_results()`
+  helpers in `subx/results.py` with 6 tests (no click needed);
+  custom `--help` screen and README CLI options/Features updated.
 - Per-FQDN DNS resolution cache in `Validator`: the brute-force phase
   validates every wordlist candidate and the validation phase then
   re-validates all hits, so every brute-force hit used to be resolved

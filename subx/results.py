@@ -93,3 +93,24 @@ def dedupe_results(results):
 def sort_results(results):
     """Sort rows deterministically: subdomain first, then best status."""
     return sorted(results, key=lambda r: (r[0].lower(), _status_rank(r[1])))
+
+
+def is_live_status(status):
+    """True when a status string is a real HTTP response code.
+
+    A validation row is "live" when the probe recorded an HTTP status
+    (e.g. ``"200"``); ``"No HTTP"`` and ``"N/A"`` rows are DNS-only and
+    not live.
+    """
+    return str(status).isdigit()
+
+
+def filter_live_results(results):
+    """Keep only rows with a working HTTP service.
+
+    Used by ``--only-live``: drops the DNS-only rows (``"No HTTP"`` /
+    ``"N/A"``) so recon pipelines get only subdomains that answered an
+    HTTP(S) probe. Run after ``dedupe_results``/``sort_results`` so the
+    merged rows stay consistent.
+    """
+    return [row for row in results if is_live_status(row[1])]

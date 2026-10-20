@@ -30,6 +30,7 @@
   - Two random-subdomain probes detect wildcard DNS before the scan starts
   - Status per subdomain: HTTP status code, `No HTTP` (resolves, no web service), or `N/A` (HTTP checks skipped)
   - IP address resolution and grouping per subdomain
+  - `--only-live` shows only subdomains with a working HTTP service, hiding DNS-only rows — ideal for recon pipelines
 
 ---
 
@@ -224,6 +225,7 @@ enumeration control:
   --no-brute           Disable wordlist brute-forcing
   --exclude-sub GLOB   Skip brute-force candidates matching the glob (repeatable)
   --no-http            Skip HTTP/HTTPS service validation
+  --only-live          Show only subdomains with a working HTTP service (hides DNS-only rows)
 
 output & logging:
   -o, --output FILE    Save results to file (.json, .csv, .txt)
