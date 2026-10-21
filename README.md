@@ -137,6 +137,13 @@ subx example.com -o results.txt    # plain text
 subx example.com -v
 ```
 
+### Interrupting a scan (Ctrl-C)
+Pressing Ctrl-C no longer drops everything the scan found: SubX prints a
+partial-results banner (how many candidates were validated before the
+interrupt), renders the results table for what was validated, and still
+writes the `-o` output file. The process exits with code 130 (the
+standard interrupted-by-SIGINT status).
+
 ---
 
 ## 🖼️ Screenshots

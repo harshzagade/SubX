@@ -6,6 +6,17 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Graceful summary on KeyboardInterrupt: pressing Ctrl-C mid-scan no
+  longer drops everything -- the results renderer was extracted into a
+  shared `render_results()` used by both the normal and interrupt paths,
+  so an interrupted scan prints a partial-results banner (validated vs
+  collected candidate counts), renders the table for what was validated,
+  and still writes the `-o` output file. Brute-force hits are now
+  accumulated as validated rows during the phase (the validation phase
+  re-checks everything fresh and supersedes them), and the process exits
+  130 instead of 1. 3 stub-based end-to-end tests drive the real `main()`
+  with a fake Validator (interrupt mid-brute-force, mid-validation, and
+  the clean path); README documents the Ctrl-C behavior.
 - Wordlist case-variant dedup before brute-forcing: wordlists merged
   from several sources often contain the same label in different cases
   (`Admin` vs `admin`); DNS is case-insensitive, so probing both wasted

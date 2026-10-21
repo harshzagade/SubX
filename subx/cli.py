@@ -33,6 +33,116 @@ def get_default_wordlist():
         base_dir = os.path.dirname(__file__)
         return os.path.join(base_dir, 'data', 'default_wordlist.txt')
 
+def render_results(console, log, results, found_subdomains, validator,
+                   output, only_live, quiet, start_time, interrupted=False):
+    """Display the results table/summary and save the output file.
+
+    Shared by the normal end-of-scan path and the KeyboardInterrupt
+    path: with ``interrupted=True`` a partial-results banner is printed
+    (naming how many candidates were validated before the interrupt)
+    and the output file is still written, so an interrupted scan no
+    longer drops everything it found.
+    """
+    duration = time.time() - start_time
+    if results:
+        if interrupted:
+            console.print(
+                f"\n[bold yellow][!] Scan interrupted by user -- partial results "
+                f"below ({len(results)} of {len(found_subdomains)} "
+                f"candidate(s) validated).[/bold yellow]")
+        # Collapse spelling variants of the same DNS host (letter case,
+        # trailing dot) into one row, then sort deterministically, so the
+        # table, quiet output, and saved files (-o) all show the same
+        # clean, ordered list.
+        results = sort_results(dedupe_results(results))
+
+        if only_live:
+            live_total = len(results)
+            results = filter_live_results(results)
+            hidden = live_total - len(results)
+            if hidden:
+                log.info(f"[dim]--only-live: hid {hidden} DNS-only row(s); showing {len(results)} live.[/dim]")
+
+        if quiet:
+            for sub, status, source, ips, alias in results:
+                console.print(sub)
+        else:
+            table = Table(
+                box=None,
+                header_style="bold blue",
+                border_style="dim",
+                expand=False,
+                pad_edge=False,
+                show_header=True
+            )
+            table.add_column("Subdomain", style="white", no_wrap=True, min_width=30)
+            table.add_column("Status", justify="center", min_width=10)
+            table.add_column("Source", style="dim white", min_width=15)
+            table.add_column("IP Addresses", style="dim green")
+            table.add_column("CNAME", style="dim cyan")
+
+            for sub, status, source, ips, alias in results:
+                # Colorize status
+                status_styled = status
+                if status == "200":
+                    status_styled = f"[bold green]{status}[/bold green]"
+                elif status.startswith("3"):
+                    status_styled = f"[bold yellow]{status}[/bold yellow]"
+                elif status == "No HTTP":
+                    status_styled = "[dim]DNS[/dim]"
+                elif status == "N/A":
+                    status_styled = "[dim]N/A[/dim]"
+                else:
+                    status_styled = f"[bold red]{status}[/bold red]"
+
+                table.add_row(sub, status_styled, source, ips, alias or "")
+
+            console.print("\n[bold white]RESULTS[/bold white]")
+            console.print(table)
+
+            source_counts = {}
+            for _, _, source, _, _ in results:
+                source_counts[source] = source_counts.get(source, 0) + 1
+            summary_items = [f"{s}: {c}" for s, c in source_counts.items()]
+
+            console.print(f"\n[dim]Finished in {duration:.2f}s. Found {len(results)} active subdomains.[/dim]")
+            console.print(f"[dim]Sources: {', '.join(summary_items)}[/dim]")
+            if validator.wildcard_filtered:
+                console.print(f"[dim]Filtered {validator.wildcard_filtered} wildcard false positive(s).[/dim]")
+            if validator.dns_cache_hits:
+                console.print(f"[dim]Reused {validator.dns_cache_hits} cached DNS result(s) across phases.[/dim]")
+
+        # 5. Output to file
+        if output:
+            try:
+                if output.endswith('.json'):
+                    data = [{"subdomain": r[0], "status": r[1], "source": r[2], "ips": r[3], "cname": r[4] or None} for r in results]
+                    with open(output, 'w') as f:
+                        json.dump(data, f, indent=4)
+                elif output.endswith('.csv'):
+                    with open(output, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(["Subdomain", "Status", "Source", "IP Addresses", "CNAME"])
+                        writer.writerows(results)
+                else:
+                    with open(output, 'w') as f:
+                        for r in results:
+                            line = f"{r[0]} ({r[1]}) - {r[3]}"
+                            if r[4]:
+                                line += f" -> {r[4]}"
+                            f.write(line + "\n")
+                log.info(f"Results saved to [bold underline]{output}[/bold underline]")
+            except Exception as e:
+                log.error(f"Error saving output: {e}")
+    elif interrupted:
+        console.print("\n[bold yellow][!] Scan interrupted by user.[/bold yellow]")
+        if found_subdomains:
+            console.print(f"[dim]{len(found_subdomains)} candidate(s) collected, "
+                          f"none validated yet.[/dim]")
+    else:
+        log.warning("No active subdomains found after validation.")
+
+
 @click.command(cls=RichHelpCommand, context_settings=dict(help_option_names=['-h', '--help']))
 @click.version_option(version='0.1.0', prog_name='SubX')
 @click.argument('domain')
@@ -88,6 +198,9 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
     validator = Validator(dns_timeout=timeout, http_timeout=http_timeout,
                         dns_retries=dns_retries)
     found_subdomains = {}  # subdomain -> source
+    # Validated rows, kept outside the try so a KeyboardInterrupt
+    # still renders and saves what was found before the interrupt.
+    results = []
 
     try:
         # 0. Wildcard Detection
@@ -164,6 +277,11 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
                                         found_subdomains[sub] = "Both"
                                     else:
                                         found_subdomains[sub] = "Brute"
+                                    ips, status, alias = result
+                                    results.append((sub, str(status),
+                                                    found_subdomains[sub],
+                                                    ", ".join(ips),
+                                                    alias or ""))
                                 progress.update(task, advance=1)
                 else:
                     with ThreadPoolExecutor(max_workers=threads) as executor:
@@ -175,6 +293,11 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
                                     found_subdomains[sub] = "Both"
                                 else:
                                     found_subdomains[sub] = "Brute"
+                                ips, status, alias = result
+                                results.append((sub, str(status),
+                                                found_subdomains[sub],
+                                                ", ".join(ips),
+                                                alias or ""))
         
         log.info(f"[bold green]✓[/bold green] Total unique subdomains: [bold white]{len(found_subdomains)}[/bold white]")
 
@@ -183,8 +306,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
             return
 
         # 3. Validation
-        results = []
         log.info(f"[bold blue]i[/bold blue] Validating candidates...")
+        results = []
         
         def validate_task(sub_source):
             sub, source = sub_source
@@ -219,98 +342,14 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
                         results.append(res)
 
         # 4. Results Display
-        duration = time.time() - start_time
-        if results:
-            # Collapse spelling variants of the same DNS host (letter case,
-            # trailing dot) into one row, then sort deterministically, so the
-            # table, quiet output, and saved files (-o) all show the same
-            # clean, ordered list.
-            results = sort_results(dedupe_results(results))
+        render_results(console, log, results, found_subdomains, validator,
+                       output, only_live, quiet, start_time)
 
-            if only_live:
-                live_total = len(results)
-                results = filter_live_results(results)
-                hidden = live_total - len(results)
-                if hidden:
-                    log.info(f"[dim]--only-live: hid {hidden} DNS-only row(s); showing {len(results)} live.[/dim]")
-
-            if quiet:
-                for sub, status, source, ips, alias in results:
-                    console.print(sub)
-            else:
-                table = Table(
-                    box=None,
-                    header_style="bold blue",
-                    border_style="dim",
-                    expand=False,
-                    pad_edge=False,
-                    show_header=True
-                )
-                table.add_column("Subdomain", style="white", no_wrap=True, min_width=30)
-                table.add_column("Status", justify="center", min_width=10)
-                table.add_column("Source", style="dim white", min_width=15)
-                table.add_column("IP Addresses", style="dim green")
-                table.add_column("CNAME", style="dim cyan")
-
-                for sub, status, source, ips, alias in results:
-                    # Colorize status
-                    status_styled = status
-                    if status == "200":
-                        status_styled = f"[bold green]{status}[/bold green]"
-                    elif status.startswith("3"):
-                        status_styled = f"[bold yellow]{status}[/bold yellow]"
-                    elif status == "No HTTP":
-                        status_styled = "[dim]DNS[/dim]"
-                    elif status == "N/A":
-                        status_styled = "[dim]N/A[/dim]"
-                    else:
-                        status_styled = f"[bold red]{status}[/bold red]"
-                    
-                    table.add_row(sub, status_styled, source, ips, alias or "")
-                
-                console.print("\n[bold white]RESULTS[/bold white]")
-                console.print(table)
-                
-                source_counts = {}
-                for _, _, source, _, _ in results:
-                    source_counts[source] = source_counts.get(source, 0) + 1
-                summary_items = [f"{s}: {c}" for s, c in source_counts.items()]
-                
-                console.print(f"\n[dim]Finished in {duration:.2f}s. Found {len(results)} active subdomains.[/dim]")
-                console.print(f"[dim]Sources: {', '.join(summary_items)}[/dim]")
-                if validator.wildcard_filtered:
-                    console.print(f"[dim]Filtered {validator.wildcard_filtered} wildcard false positive(s).[/dim]")
-                if validator.dns_cache_hits:
-                    console.print(f"[dim]Reused {validator.dns_cache_hits} cached DNS result(s) across phases.[/dim]")
-
-            # 5. Output to file
-            if output:
-                try:
-                    if output.endswith('.json'):
-                        data = [{"subdomain": r[0], "status": r[1], "source": r[2], "ips": r[3], "cname": r[4] or None} for r in results]
-                        with open(output, 'w') as f:
-                            json.dump(data, f, indent=4)
-                    elif output.endswith('.csv'):
-                        with open(output, 'w', newline='') as f:
-                            writer = csv.writer(f)
-                            writer.writerow(["Subdomain", "Status", "Source", "IP Addresses", "CNAME"])
-                            writer.writerows(results)
-                    else:
-                        with open(output, 'w') as f:
-                            for r in results:
-                                line = f"{r[0]} ({r[1]}) - {r[3]}"
-                                if r[4]:
-                                    line += f" -> {r[4]}"
-                                f.write(line + "\n")
-                    log.info(f"Results saved to [bold underline]{output}[/bold underline]")
-                except Exception as e:
-                    log.error(f"Error saving output: {e}")
-        else:
-            log.warning("No active subdomains found after validation.")
-            
     except KeyboardInterrupt:
-        console.print("\n[bold red][!] Scan interrupted by user. Exiting...[/bold red]")
-        sys.exit(1)
+        render_results(console, log, results, found_subdomains, validator,
+                       output, only_live, quiet, start_time, interrupted=True)
+        sys.exit(130)
+
 
 if __name__ == '__main__':
     main()
