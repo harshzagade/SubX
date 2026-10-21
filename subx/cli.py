@@ -15,6 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeEl
 from .enumerator import Enumerator
 from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
+from .wordlist import load_wordlist, dedupe_case_variants
 from .results import dedupe_results, sort_results, filter_live_results
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
@@ -114,11 +115,16 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
         if not no_brute:
             path = wordlist if wordlist else get_default_wordlist()
             try:
-                with open(path, 'r') as f:
-                    words = [line.strip().lower() for line in f if line.strip()]
+                words = load_wordlist(path)
             except Exception as e:
                 log.error(f"[bold red]✗[/bold red] Error reading wordlist: {e}")
                 words = []
+
+            # DNS is case-insensitive, so case-variant duplicates in the
+            # wordlist (e.g. "Admin" and "admin") would waste queries.
+            words, dupes = dedupe_case_variants(words)
+            if dupes:
+                log.info(f"[dim]Skipped {dupes} case-variant duplicate(s) in wordlist[/dim]")
 
             if exclude_sub:
                 try:

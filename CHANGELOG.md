@@ -6,6 +6,13 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Wordlist case-variant dedup before brute-forcing: wordlists merged
+  from several sources often contain the same label in different cases
+  (`Admin` vs `admin`); DNS is case-insensitive, so probing both wasted
+  queries. New stdlib-only `subx/wordlist.py` (`load_wordlist()` +
+  `dedupe_case_variants()`) collapses variants to one candidate in
+  first-seen order, and the dropped count is logged. 6 new tests; README
+  brute-force section updated.
 - `--only-live` CLI flag: show only subdomains with a working HTTP
   service -- rows with `No HTTP`/`N/A` status are hidden from the
   table, quiet (`-q`) output, and saved `-o` files, which is what
