@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeEl
 from .enumerator import Enumerator
 from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
-from .wordlist import load_wordlist, dedupe_case_variants
+from .wordlist import load_wordlist, dedupe_case_variants, skip_passive_hits
 from .results import dedupe_results, sort_results, filter_live_results
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
@@ -251,6 +251,28 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
                 skipped = before - len(words)
                 if skipped:
                     log.info(f"[dim]Skipped {skipped} brute-force candidate(s) matching --exclude-sub[/dim]")
+
+            if found_subdomains:
+                # Words already found passively need no brute-force
+                # probe: the validation phase validates each candidate
+                # exactly once anyway. Skipping them here saves a DNS
+                # lookup plus an HTTP probe per word on large
+                # wordlists. Their source is upgraded to "Both" (not
+                # left as "Passive") so the results still record that
+                # the wordlist contained them -- only the redundant
+                # probe is skipped, not the information.
+                words, passive_skipped = skip_passive_hits(
+                    words, found_subdomains, domain)
+                if passive_skipped:
+                    passive_index = {
+                        sub.strip().rstrip(".").lower(): sub
+                        for sub in found_subdomains
+                    }
+                    for word in passive_skipped:
+                        key = passive_index.get(f"{word.strip().lower()}.{domain}")
+                        if key is not None:
+                            found_subdomains[key] = "Both"
+                    log.info(f"[dim]Skipped {len(passive_skipped)} brute-force candidate(s) already found via passive sources[/dim]")
 
             if words:
                 log.info(f"[bold blue]i[/bold blue] Brute-forcing with [white]{len(words)}[/white] words...")

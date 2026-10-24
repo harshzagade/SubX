@@ -6,6 +6,18 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Skip brute-force words already discovered by passive sources: a
+  word whose candidate (`www.example.com`) is already a passive hit
+  is no longer probed in the brute-force phase -- the validation phase
+  validates every candidate exactly once anyway, so re-probing spent a
+  DNS lookup plus an HTTP probe per word on large wordlists. Skipped
+  candidates are upgraded to source `Both` (the wordlist contained them
+  too) and the skipped count is logged. New stdlib-only
+  `skip_passive_hits()` in `subx/wordlist.py` (exact single-label,
+  case-insensitive, trailing-dot tolerant; deeper names like
+  `a.www.example.com` do not skip `www`); 4 unit tests + 1 stub-based
+  end-to-end test driving the real `main()`; README brute-force section
+  updated.
 - Graceful summary on KeyboardInterrupt: pressing Ctrl-C mid-scan no
   longer drops everything -- the results renderer was extracted into a
   shared `render_results()` used by both the normal and interrupt paths,

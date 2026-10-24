@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from subx.wordlist import load_wordlist, dedupe_case_variants
+from subx.wordlist import load_wordlist, dedupe_case_variants, skip_passive_hits
 
 
 def test_dedupe_case_variants_drops_duplicates(tmp_path):
@@ -35,6 +35,44 @@ def test_load_wordlist_strips_blanks_and_lowercases(tmp_path):
 def test_load_wordlist_missing_file_raises():
     with pytest.raises(OSError):
         load_wordlist("/nonexistent/wordlist.txt")
+
+
+def test_skip_passive_hits_skips_exact_matches():
+    kept, skipped = skip_passive_hits(
+        ["www", "mail", "ftp"],
+        {"www.example.com", "api.example.com"},
+        "example.com",
+    )
+    assert kept == ["mail", "ftp"]
+    assert skipped == ["www"]
+
+
+def test_skip_passive_hits_case_and_trailing_dot_tolerant():
+    kept, skipped = skip_passive_hits(
+        ["www", "mail"],
+        {"WWW.EXAMPLE.COM.", "Mail.Example.Com"},
+        "example.com",
+    )
+    assert kept == []
+    assert skipped == ["www", "mail"]
+
+
+def test_skip_passive_hits_keeps_deeper_names_and_bare_domain():
+    # a.www.example.com is a different host from www.example.com,
+    # and the bare target domain matches no word.
+    kept, skipped = skip_passive_hits(
+        ["www", "api"],
+        {"a.www.example.com", "example.com", "api.other.com"},
+        "example.com",
+    )
+    assert kept == ["www", "api"]
+    assert skipped == []
+
+
+def test_skip_passive_hits_empty_inputs():
+    assert skip_passive_hits([], {"www.example.com"}, "example.com") == ([], [])
+    assert skip_passive_hits(["www"], set(), "example.com") == (["www"], [])
+    assert skip_passive_hits(["www"], None, "example.com") == (["www"], [])
 
 
 def test_load_then_dedupe_end_to_end(tmp_path):

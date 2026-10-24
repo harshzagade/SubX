@@ -176,6 +176,8 @@ On noisy targets, `--exclude-sub PATTERN` (repeatable) skips brute-force candida
 
 Case-variant duplicates in the wordlist (e.g. `Admin` and `admin`, common in wordlists merged from several sources) are collapsed to a single candidate before any DNS query is made — DNS is case-insensitive, so probing both would waste queries. The dropped count is logged.
 
+Words already discovered by passive sources are skipped in the brute-force phase as well: probing `www.example.com` again when a passive source already returned it would spend a DNS lookup plus an HTTP probe for a candidate that is already known, and the validation phase validates every candidate exactly once anyway. Skipped candidates keep the **Both** source tag (the wordlist contained them too) — only the redundant probe is skipped, not the information. The skipped count is logged.
+
 ### 4. Validation
 Each candidate is resolved to its A records and then probed: HTTPS first, then HTTP, with a 3-second timeout (configurable via `--http-timeout`). A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned.
 
