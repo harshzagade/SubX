@@ -6,6 +6,17 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- AAAA (IPv6) resolution alongside A records: `Validator` now queries
+  both record types on the CNAME-resolved final name and reports A
+  addresses followed by AAAA addresses (deduplicated, in order), so
+  IPv6-only hosts are no longer dropped as misses and dual-stack hosts
+  show their full address set. A record type's definitive failure is
+  tolerated on its own; only both types failing is a miss, and the
+  wildcard filter applies to the combined set (all-IPs-wildcard drops,
+  mixed unique/wildcard keeps). The combined result is cached per FQDN
+  like before. 7 new rdtype-aware tests in `tests/test_aaaa.py`;
+  `test_dns_cache.py` query counts updated (CNAME + A + AAAA = 3 per
+  first validation); README validation section updated.
 - Skip brute-force words already discovered by passive sources: a
   word whose candidate (`www.example.com`) is already a passive hit
   is no longer probed in the brute-force phase -- the validation phase

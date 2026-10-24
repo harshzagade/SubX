@@ -211,14 +211,23 @@ class Validator:
         return current, alias
 
     def _cached_dns(self, subdomain):
-        """Resolve ``subdomain``'s CNAME chain and A records, using the cache.
+        """Resolve ``subdomain``'s CNAME chain and A/AAAA records, using the cache.
 
         The first validation of a name performs the DNS work -- CNAME
-        chain following plus A-record lookup -- and stores the outcome
-        keyed by the normalized name. Later validations of the same
-        name skip DNS entirely and reuse the stored result, which is
-        what saves the validation phase from re-resolving every
-        brute-force hit from scratch.
+        chain following plus A-record and AAAA-record lookups -- and
+        stores the outcome keyed by the normalized name. Later
+        validations of the same name skip DNS entirely and reuse the
+        stored result, which is what saves the validation phase from
+        re-resolving every brute-force hit from scratch.
+
+        A name with only AAAA records (no A) is a hit, not a miss:
+        each record type's definitive failure (NXDOMAIN, NoAnswer) is
+        tolerated on its own, and the name is a miss only when both
+        types fail. The reported IP list is the A addresses followed
+        by the AAAA addresses, deduplicated in order, so the IP column
+        shows the full dual-stack picture and the wildcard filter
+        (which drops a candidate only when *all* its IPs are wildcard
+        IPs) applies to the v6 set as well.
 
         Definitive misses (NXDOMAIN, NoAnswer, other DNSErrors) are
         cached too, since a dead name stays dead for the length of a
@@ -242,8 +251,23 @@ class Validator:
         # same deterministic data, so last-write-wins is safe.
         try:
             final_name, alias = self.resolve_cnames(subdomain)
-            answers = self._resolve(final_name, 'A')
-            result = ([str(ip) for ip in answers], alias)
+            ips = []
+            failures = []
+            for rdtype in ("A", "AAAA"):
+                try:
+                    answers = self._resolve(final_name, rdtype)
+                except dns.resolver.Timeout:
+                    raise  # Transient: never cached, retried fresh.
+                except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+                        dns.exception.DNSException) as e:
+                    failures.append(e)
+                    continue
+                ips.extend(str(ip) for ip in answers)
+            if not ips:
+                # Both record types failed definitively; surface the
+                # last failure so the caller caches it as a miss.
+                raise failures[-1]
+            result = (list(dict.fromkeys(ips)), alias)
         except dns.resolver.Timeout:
             raise  # Transient: never cached, retried fresh next time.
         except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
@@ -261,9 +285,10 @@ class Validator:
         CNAME aliases are followed to their final target: a name that
         is only a CNAME (e.g. pointing at a CDN) is no longer dropped
         as a miss. Returns ``(ips, status, alias)`` -- the final
-        A-record IPs, the HTTP status (or ``"No HTTP"``/``"N/A"``), and
-        the first CNAME target seen (``None`` when the name has no
-        CNAME record). Returns ``None`` when the name does not resolve.
+        A-record and AAAA-record IPs (A first, deduplicated), the HTTP
+        status (or ``"No HTTP"``/``"N/A"``), and the first CNAME target
+        seen (``None`` when the name has no CNAME record). Returns
+        ``None`` when the name does not resolve.
 
         Internationalized names are converted to punycode first, so
         unicode targets resolve instead of erroring out.
@@ -279,7 +304,7 @@ class Validator:
         """
         subdomain = to_ascii_domain(subdomain)
         try:
-            # CNAME chain + A records come from the per-FQDN cache, so
+            # CNAME chain + A/AAAA records come from the per-FQDN cache, so
             # the validation phase reuses the brute-force phase's DNS
             # work instead of repeating it. The wildcard filter below
             # still runs on every call against the cached IPs, so a

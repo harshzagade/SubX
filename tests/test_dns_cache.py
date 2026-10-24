@@ -117,7 +117,7 @@ def test_second_validate_is_served_from_cache(validator_factory):
     assert ips == [_REAL_IP]
     assert alias is None
     first_call_count = len(calls)
-    assert first_call_count == 2  # CNAME probe (NoAnswer) + A lookup
+    assert first_call_count == 3  # CNAME probe (NoAnswer) + A + AAAA lookups
 
     second = v.validate("a.example.com", check_http=False)
     assert second is not None
@@ -145,7 +145,7 @@ def test_dead_name_is_cached_not_requeried(validator_factory):
     v, calls = validator_factory({"a.example.com": [_REAL_IP]})
     assert v.validate("ghost.example.com", check_http=False) is None
     first_call_count = len(calls)
-    assert first_call_count == 2  # CNAME probe (NoAnswer) + A lookup (NXDOMAIN)
+    assert first_call_count == 3  # CNAME probe (NoAnswer) + A (NXDOMAIN) + AAAA (NXDOMAIN)
 
     assert v.validate("ghost.example.com", check_http=False) is None
     assert len(calls) == first_call_count
@@ -190,9 +190,9 @@ def test_cache_is_thread_safe(validator_factory):
         t.start()
     for t in threads:
         t.join()
-    # The DNS work happens once (CNAME probe + A lookup); every other
-    # validation is a cache hit.
-    assert len(calls) == 2
+    # The DNS work happens once (CNAME probe + A + AAAA lookups); every
+    # other validation is a cache hit.
+    assert len(calls) == 3
     assert v.dns_cache_hits == 200 - 1
 
 
@@ -203,6 +203,6 @@ def test_different_names_resolve_independently(validator_factory):
     assert v.validate("a.example.com", check_http=False)[0] == [_REAL_IP]
     assert v.validate("b.example.com", check_http=False)[0] == ["203.0.113.7"]
     assert v.validate("a.example.com", check_http=False)[0] == [_REAL_IP]
-    # a: 2 queries + cache hit; b: 2 queries. No cross-contamination.
-    assert len(calls) == 4
+    # a: 3 queries + cache hit; b: 3 queries. No cross-contamination.
+    assert len(calls) == 6
     assert v.dns_cache_hits == 1
