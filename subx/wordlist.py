@@ -6,6 +6,17 @@ rich) are not installed.
 """
 
 
+def load_words_from_lines(lines):
+    """Normalize an iterable of wordlist lines into candidate words.
+
+    Lines are stripped of surrounding whitespace, lowercased, and
+    blank lines are dropped, preserving order. This is the shared
+    normalization for both file wordlists and stdin (``-w -``), so a
+    piped list behaves exactly like the same words in a file.
+    """
+    return [line.strip().lower() for line in lines if line.strip()]
+
+
 def load_wordlist(path):
     """Read brute-force candidate words from ``path``.
 
@@ -14,7 +25,7 @@ def load_wordlist(path):
     ``OSError`` when the file cannot be read.
     """
     with open(path, "r", encoding="utf-8", errors="replace") as f:
-        return [line.strip().lower() for line in f if line.strip()]
+        return load_words_from_lines(f)
 
 
 def dedupe_case_variants(words):

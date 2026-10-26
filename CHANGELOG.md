@@ -6,6 +6,13 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Stdin wordlist: `-w -` reads brute-force candidates from stdin so
+  SubX pipes cleanly from other recon tools
+  (`assetfinder ... | subx example.com -w -`). New shared
+  `load_words_from_lines()` in `subx/wordlist.py` (used by both the
+  file and stdin paths, so normalization is identical); the `--wordlist`
+  option no longer requires an existing path, since `-` is not a file.
+  1 new test; README usage and CLI options updated.
 - `--source-timeout SEC` CLI flag: the passive-source HTTP timeout was
   hard-coded at 15s; it is now a `FloatRange` option (default 15.0)
   threaded through `Enumerator(source_timeout=...)` to all three

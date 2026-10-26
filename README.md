@@ -93,6 +93,11 @@ subx example.com -q | httpx -silent
 subx example.com -w /path/to/wordlist.txt
 ```
 
+### Wordlist from stdin
+```bash
+assetfinder example.com | subx example.com -w -   # candidates piped in, same normalization as a file
+```
+
 ### Active brute-force only
 ```bash
 subx example.com --no-passive -w custom.txt
@@ -230,7 +235,7 @@ positional arguments:
   domain                Target domain (e.g., example.com)
 
 scan settings:
-  -w, --wordlist PATH   Path to custom wordlist for brute-forcing
+  -w, --wordlist PATH   Path to custom wordlist for brute-forcing ('-' reads from stdin)
   -t, --threads NUM     Number of concurrent threads (default: 10)
   --timeout SEC         DNS resolution timeout in seconds (default: 5.0)
   --http-timeout SEC    Timeout in seconds for each HTTP/HTTPS probe request (default: 3.0)

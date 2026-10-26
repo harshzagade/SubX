@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeEl
 from .enumerator import Enumerator
 from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
-from .wordlist import load_wordlist, dedupe_case_variants, skip_passive_hits
+from .wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
 from .results import dedupe_results, sort_results, filter_live_results
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
@@ -146,7 +146,7 @@ def render_results(console, log, results, found_subdomains, validator,
 @click.command(cls=RichHelpCommand, context_settings=dict(help_option_names=['-h', '--help']))
 @click.version_option(version='0.1.0', prog_name='SubX')
 @click.argument('domain')
-@click.option('--wordlist', '-w', type=click.Path(exists=True), help='Path to custom wordlist.')
+@click.option('--wordlist', '-w', type=click.Path(), help='Path to custom wordlist, or "-" to read candidates from stdin.')
 @click.option('--threads', '-t', default=10, help='Number of threads to use.')
 @click.option('--timeout', type=click.FloatRange(min=0.1), default=5.0, show_default=True,
               help='DNS resolution timeout in seconds (applies to DNS lookups in all phases).')
@@ -230,7 +230,14 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, source_t
         if not no_brute:
             path = wordlist if wordlist else get_default_wordlist()
             try:
-                words = load_wordlist(path)
+                if wordlist == "-":
+                    # Piped candidates (e.g. `assetfinder ... | subx
+                    # example.com -w -`): read from stdin instead of a
+                    # file. Normalization matches load_wordlist, so a
+                    # piped list behaves like the same words in a file.
+                    words = load_words_from_lines(sys.stdin)
+                else:
+                    words = load_wordlist(path)
             except Exception as e:
                 log.error(f"[bold red]✗[/bold red] Error reading wordlist: {e}")
                 words = []

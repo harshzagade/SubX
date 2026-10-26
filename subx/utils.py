@@ -25,7 +25,7 @@ class RichHelpCommand(click.Command):
         # Define groups
         groups = {
             "SCAN SETTINGS": [
-                ("-w, --wordlist", "Path to custom wordlist for brute-forcing"),
+                ("-w, --wordlist", "Path to custom wordlist for brute-forcing ('-' reads from stdin)"),
                 ("-t, --threads", "Number of concurrent threads [dim](default: 10)[/dim]"),
                 ("--timeout", "DNS resolution timeout in seconds [dim](default: 5.0)[/dim]"),
                 ("--http-timeout", "HTTP probe timeout in seconds [dim](default: 3.0)[/dim]"),

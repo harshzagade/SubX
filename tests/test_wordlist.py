@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from subx.wordlist import load_wordlist, dedupe_case_variants, skip_passive_hits
+from subx.wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
 
 
 def test_dedupe_case_variants_drops_duplicates(tmp_path):
@@ -30,6 +30,14 @@ def test_load_wordlist_strips_blanks_and_lowercases(tmp_path):
     path = tmp_path / "words.txt"
     path.write_text("  Admin  \n\nMAIL\n\t\nftp\n")
     assert load_wordlist(str(path)) == ["admin", "mail", "ftp"]
+
+
+def test_load_words_from_lines_matches_file_normalization():
+    # Same normalization as load_wordlist: strip, lowercase, drop blanks.
+    assert load_words_from_lines(["  Admin  ", "", "MAIL", "\t", "ftp\n"]) == [
+        "admin", "mail", "ftp",
+    ]
+    assert load_words_from_lines([]) == []
 
 
 def test_load_wordlist_missing_file_raises():
