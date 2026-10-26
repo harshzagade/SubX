@@ -3,8 +3,15 @@ import re
 import logging
 
 class Enumerator:
-    def __init__(self, domain):
+    DEFAULT_SOURCE_TIMEOUT = 15.0
+
+    def __init__(self, domain, source_timeout=None):
         self.domain = domain
+        if source_timeout is None:
+            source_timeout = self.DEFAULT_SOURCE_TIMEOUT
+        if source_timeout <= 0:
+            raise ValueError("source_timeout must be positive")
+        self.source_timeout = source_timeout
         self.log = logging.getLogger("subx.enumerator")
 
     def passive_enumerate(self):
@@ -32,7 +39,7 @@ class Enumerator:
         subdomains = set()
         url = f"https://otx.alienvault.com/api/v1/indicators/domain/{self.domain}/passive_dns"
         try:
-            response = requests.get(url, timeout=15)
+            response = requests.get(url, timeout=self.source_timeout)
             if response.status_code == 200:
                 data = response.json()
                 for entry in data.get('passive_dns', []):
@@ -49,7 +56,7 @@ class Enumerator:
         # Regex to ensure the subdomain is a valid format (no spaces, valid characters)
         domain_regex = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
         try:
-            response = requests.get(url, timeout=15)
+            response = requests.get(url, timeout=self.source_timeout)
             if response.status_code == 200:
                 data = response.json()
                 for entry in data:
@@ -68,7 +75,7 @@ class Enumerator:
         subdomains = set()
         url = f"https://api.hackertarget.com/hostsearch/?q={self.domain}"
         try:
-            response = requests.get(url, timeout=15)
+            response = requests.get(url, timeout=self.source_timeout)
             if response.status_code == 200:
                 for line in response.text.split('\n'):
                     if ',' in line:

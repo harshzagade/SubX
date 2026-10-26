@@ -113,6 +113,11 @@ subx example.com --no-http -t 100
 subx example.com --timeout 10
 ```
 
+### Custom passive-source timeout
+```bash
+subx example.com --source-timeout 5   # each passive-source request times out after 5s (default: 15.0)
+```
+
 ### Retry flaky DNS queries
 ```bash
 subx example.com --dns-retries 2   # retry each timed-out DNS query twice (default: 1)
@@ -162,7 +167,7 @@ A real scan prints a rich results table with columns **Subdomain**, **Status**, 
 Before anything else, SubX probes two random 15-character subdomains of the target. A wildcard is declared only when at least two probes resolve AND agree on at least one IP — a single resolving probe is treated as an anycast fluke and ignored, so one stray answer can no longer poison the filter for the whole scan. The agreed wildcard IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally.
 
 ### 2. Passive Enumeration
-Three OSINT sources are queried in parallel (each with a 15-second timeout; a failed source is skipped, not fatal):
+Three OSINT sources are queried in parallel (each with a configurable timeout, 15 seconds by default via `--source-timeout`; a failed source is skipped, not fatal):
 - **crt.sh** — Certificate Transparency logs; subdomain names are validated against a strict domain regex and wildcard entries (`*.example.com`) are excluded
 - **HackerTarget** — DNS record aggregation API
 - **AlienVault OTX** — passive DNS records
@@ -230,6 +235,7 @@ scan settings:
   --timeout SEC         DNS resolution timeout in seconds (default: 5.0)
   --http-timeout SEC    Timeout in seconds for each HTTP/HTTPS probe request (default: 3.0)
   --dns-retries NUM     Retry attempts per DNS query after a timeout (default: 1)
+  --source-timeout SEC  Timeout per passive-source request (default: 15.0)
 
 enumeration control:
   --no-passive         Disable passive source discovery

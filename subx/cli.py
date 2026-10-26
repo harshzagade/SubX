@@ -154,6 +154,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Timeout in seconds for each HTTP/HTTPS probe request during validation.')
 @click.option('--dns-retries', type=click.IntRange(min=0), default=1, show_default=True,
               help='Retry attempts per DNS query after a timeout before a candidate is dropped.')
+@click.option('--source-timeout', type=click.FloatRange(min=0.1), default=15.0, show_default=True,
+              help='Timeout in seconds for each passive-source HTTP request.')
 @click.option('--output', '-o', help='Path to output file (json, csv, or txt).')
 @click.option('--no-passive', is_flag=True, help='Skip passive enumeration.')
 @click.option('--no-brute', is_flag=True, help='Skip brute-force enumeration.')
@@ -164,7 +166,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Show only subdomains with a working HTTP service (hide DNS-only rows).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, source_timeout, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -191,7 +193,7 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, output, 
     
     start_time = time.time()
     
-    enumerator = Enumerator(domain)
+    enumerator = Enumerator(domain, source_timeout=source_timeout)
     # Inject logger into enumerator for verbose feedback
     enumerator.log = log
     

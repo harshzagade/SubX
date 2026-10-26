@@ -6,6 +6,13 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--source-timeout SEC` CLI flag: the passive-source HTTP timeout was
+  hard-coded at 15s; it is now a `FloatRange` option (default 15.0)
+  threaded through `Enumerator(source_timeout=...)` to all three
+  passive sources (crt.sh, HackerTarget, AlienVault), with a
+  non-positive value rejected up front. 3 new tests in
+  `tests/test_enumerator.py`; README passive-enumeration section and
+  CLI options updated.
 - AAAA (IPv6) resolution alongside A records: `Validator` now queries
   both record types on the CNAME-resolved final name and reports A
   addresses followed by AAAA addresses (deduplicated, in order), so
