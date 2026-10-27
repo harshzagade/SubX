@@ -14,6 +14,17 @@ All notable changes to SubX are documented here. Format follows
   resolv.conf nameservers are not consulted alongside it. 9 new
   stub-based tests in `tests/test_resolver.py`; README usage and
   CLI options updated.
+- Passive-source retry: a passive source that fails with a transient
+  HTTP error (connection error or timeout) is now retried once
+  instead of being silently dropped on the first failure. The
+  individual source methods re-raise `requests.RequestException`
+  (other errors, e.g. bad payloads, still fail fast without a
+  retry), `passive_enumerate()` retries only transient failures,
+  and sources that still fail are recorded in the new
+  `Enumerator.source_failures` dict and named in the CLI scan
+  summary (`Passive source failures: N (...)`). 7 new tests in
+  `tests/test_passive_retry.py`; README passive-enumeration
+  section updated.
 - Stdin wordlist: `-w -` reads brute-force candidates from stdin so
   SubX pipes cleanly from other recon tools
   (`assetfinder ... | subx example.com -w -`). New shared

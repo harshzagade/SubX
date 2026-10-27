@@ -177,7 +177,7 @@ A real scan prints a rich results table with columns **Subdomain**, **Status**, 
 Before anything else, SubX probes two random 15-character subdomains of the target. A wildcard is declared only when at least two probes resolve AND agree on at least one IP — a single resolving probe is treated as an anycast fluke and ignored, so one stray answer can no longer poison the filter for the whole scan. The agreed wildcard IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally.
 
 ### 2. Passive Enumeration
-Three OSINT sources are queried in parallel (each with a configurable timeout, 15 seconds by default via `--source-timeout`; a failed source is skipped, not fatal):
+Three OSINT sources are queried in parallel (each with a configurable timeout, 15 seconds by default via `--source-timeout`; a source that fails with a transient HTTP error — connection error or timeout — is retried once, and a source that still fails is named in the scan summary's passive-source-failure count instead of silently disappearing):
 - **crt.sh** — Certificate Transparency logs; subdomain names are validated against a strict domain regex and wildcard entries (`*.example.com`) are excluded
 - **HackerTarget** — DNS record aggregation API
 - **AlienVault OTX** — passive DNS records

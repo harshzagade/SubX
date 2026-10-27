@@ -231,6 +231,10 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, source_t
             for sub in passive_subs:
                 found_subdomains[sub] = "Passive"
             log.info(f"[bold green]✓[/bold green] Found [white]{len(passive_subs)}[/white] candidates via passive sources")
+            failures = getattr(enumerator, "source_failures", {})
+            if failures:
+                names = ", ".join(sorted(failures))
+                log.info(f"[dim]Passive source failures: {len(failures)} ({names}) -- retried once, still failing.[/dim]")
 
         # 2. Brute Force Enumeration
         if not no_brute:
