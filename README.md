@@ -113,6 +113,11 @@ subx example.com --no-brute
 subx example.com --no-http -t 100
 ```
 
+### Custom DNS resolver
+```bash
+subx example.com --resolver 1.1.1.1   # all DNS queries go to 1.1.1.1, not the system resolver (garbage IPs fail fast with exit 2)
+```
+
 ### Custom DNS timeout
 ```bash
 subx example.com --timeout 10
@@ -240,6 +245,7 @@ scan settings:
   --timeout SEC         DNS resolution timeout in seconds (default: 5.0)
   --http-timeout SEC    Timeout in seconds for each HTTP/HTTPS probe request (default: 3.0)
   --dns-retries NUM     Retry attempts per DNS query after a timeout (default: 1)
+  --resolver IP         Custom DNS resolver IP (e.g. 1.1.1.1) instead of the system resolver
   --source-timeout SEC  Timeout per passive-source request (default: 15.0)
 
 enumeration control:

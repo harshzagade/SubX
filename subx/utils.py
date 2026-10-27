@@ -30,6 +30,7 @@ class RichHelpCommand(click.Command):
                 ("--timeout", "DNS resolution timeout in seconds [dim](default: 5.0)[/dim]"),
                 ("--http-timeout", "HTTP probe timeout in seconds [dim](default: 3.0)[/dim]"),
                 ("--dns-retries", "Retry attempts per DNS query after a timeout [dim](default: 1)[/dim]"),
+                ("--resolver", "Custom DNS resolver IP, e.g. 1.1.1.1 [dim](default: system resolver)[/dim]"),
                 ("--source-timeout", "Timeout per passive-source request in seconds [dim](default: 15.0)[/dim]"),
             ],
             "ENUMERATION CONTROL": [

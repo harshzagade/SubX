@@ -156,6 +156,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Retry attempts per DNS query after a timeout before a candidate is dropped.')
 @click.option('--source-timeout', type=click.FloatRange(min=0.1), default=15.0, show_default=True,
               help='Timeout in seconds for each passive-source HTTP request.')
+@click.option('--resolver', default=None,
+              help='IP address of a custom DNS resolver (e.g. 1.1.1.1) instead of the system resolver.')
 @click.option('--output', '-o', help='Path to output file (json, csv, or txt).')
 @click.option('--no-passive', is_flag=True, help='Skip passive enumeration.')
 @click.option('--no-brute', is_flag=True, help='Skip brute-force enumeration.')
@@ -166,7 +168,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Show only subdomains with a working HTTP service (hide DNS-only rows).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, source_timeout, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -197,8 +199,12 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, source_t
     # Inject logger into enumerator for verbose feedback
     enumerator.log = log
     
-    validator = Validator(dns_timeout=timeout, http_timeout=http_timeout,
-                        dns_retries=dns_retries)
+    try:
+        validator = Validator(dns_timeout=timeout, http_timeout=http_timeout,
+                              dns_retries=dns_retries, resolver_ip=resolver)
+    except ValueError as e:
+        console.print(f"[bold red]Invalid option:[/bold red] {e}")
+        sys.exit(2)
     found_subdomains = {}  # subdomain -> source
     # Validated rows, kept outside the try so a KeyboardInterrupt
     # still renders and saves what was found before the interrupt.

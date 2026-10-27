@@ -1,4 +1,5 @@
 import dns.resolver
+import ipaddress
 import requests
 import random
 import string
@@ -67,7 +68,7 @@ class Validator:
     WILDCARD_PROBES = 2
 
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
-                 dns_retries=None):
+                 dns_retries=None, resolver_ip=None):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -84,6 +85,17 @@ class Validator:
         if not isinstance(dns_retries, int) or dns_retries < 0:
             raise ValueError("dns_retries must be a non-negative integer")
         self.dns_retries = dns_retries
+        # Custom resolver: a single IP (v4 or v6) validated up front,
+        # so garbage input fails fast instead of breaking mid-scan.
+        # ``None`` keeps the system resolver, exactly as before.
+        self.resolver_ip = None
+        if resolver_ip is not None:
+            try:
+                self.resolver_ip = str(ipaddress.ip_address(str(resolver_ip).strip()))
+            except ValueError:
+                raise ValueError(
+                    f"resolver_ip must be a valid IP address, got {resolver_ip!r}"
+                ) from None
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -105,7 +117,14 @@ class Validator:
         self.dns_cache_hits = 0
         # A dedicated resolver so the timeout is configurable per scan
         # instead of relying on dnspython's global default resolver.
-        self.resolver = dns.resolver.Resolver()
+        # With a custom resolver IP, dnspython must not read the system
+        # resolv.conf (configure=False) or the system nameservers would
+        # still be consulted alongside the chosen one.
+        if self.resolver_ip is not None:
+            self.resolver = dns.resolver.Resolver(configure=False)
+            self.resolver.nameservers = [self.resolver_ip]
+        else:
+            self.resolver = dns.resolver.Resolver()
         self.resolver.timeout = dns_timeout
         self.resolver.lifetime = dns_timeout
 

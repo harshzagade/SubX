@@ -6,6 +6,14 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--resolver IP` CLI flag: all DNS queries go to a custom resolver
+  (e.g. `1.1.1.1`) instead of the system resolver. `Validator`
+  validates the IP up front with the stdlib `ipaddress` module
+  (v4 or v6; garbage fails fast with exit 2) and builds the
+  dnspython resolver with `configure=False` so the system
+  resolv.conf nameservers are not consulted alongside it. 9 new
+  stub-based tests in `tests/test_resolver.py`; README usage and
+  CLI options updated.
 - Stdin wordlist: `-w -` reads brute-force candidates from stdin so
   SubX pipes cleanly from other recon tools
   (`assetfinder ... | subx example.com -w -`). New shared
