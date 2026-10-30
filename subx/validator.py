@@ -59,6 +59,15 @@ class Validator:
     #: NoAnswer and other definitive answers fail fast on the first try.
     DEFAULT_DNS_RETRIES = 1
 
+    #: Number of extra attempts after a transient HTTP probe failure
+    #: (connection error or probe timeout) before a protocol is given
+    #: up as "No HTTP". A single dropped packet or reset connection
+    #: should not mark a live host dead, so the probe is retried once;
+    #: non-transient failures (HTTP error responses, redirect loops,
+    #: TLS errors) are never retried and fall through to the next
+    #: protocol immediately.
+    DEFAULT_HTTP_RETRIES = 1
+
     #: Number of independent random subdomains probed by
     #: :meth:`detect_wildcard`. A single probe can hit an anycast fluke
     #: -- one random name resolving to an unrelated anycast IP -- which
@@ -68,7 +77,7 @@ class Validator:
     WILDCARD_PROBES = 2
 
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
-                 dns_retries=None, resolver_ip=None):
+                 dns_retries=None, resolver_ip=None, http_retries=None):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -84,6 +93,15 @@ class Validator:
             dns_retries = self.DEFAULT_DNS_RETRIES
         if not isinstance(dns_retries, int) or dns_retries < 0:
             raise ValueError("dns_retries must be a non-negative integer")
+        if http_retries is None:
+            http_retries = self.DEFAULT_HTTP_RETRIES
+        if not isinstance(http_retries, int) or http_retries < 0:
+            raise ValueError("http_retries must be a non-negative integer")
+        self.http_retries = http_retries
+        # How many HTTP probes were retried after a transient failure.
+        # Reported in the scan summary so a flaky network leaves a
+        # visible trace instead of silently costing an extra request.
+        self.http_probe_retries = 0
         self.dns_retries = dns_retries
         # Custom resolver: a single IP (v4 or v6) validated up front,
         # so garbage input fails fast instead of breaking mid-scan.
@@ -298,6 +316,41 @@ class Validator:
             self._dns_cache[subdomain] = result
         return result
 
+    def _probe_http(self, url):
+        """GET ``url``, retrying transient failures once.
+
+        Only connection errors and timeouts are retried -- a refused
+        connection or a stalled response is often a flaky network, not
+        a dead host. Every other ``requests`` failure (TLS errors,
+        redirect loops, invalid URLs) propagates immediately so the
+        caller can fall through to the next protocol.
+
+        The transient exception classes are resolved from the
+        ``requests`` module at call time rather than import time, so
+        test doubles that define their own ``ConnectionError`` /
+        ``Timeout`` subclasses are honored.
+
+        Returns the response. Raises the last transient error when
+        all attempts are exhausted.
+        """
+        transient = tuple(
+            exc for exc in (
+                getattr(requests, "ConnectionError", None),
+                getattr(requests, "Timeout", None),
+            )
+            if isinstance(exc, type)
+        )
+        for attempt in range(self.http_retries + 1):
+            try:
+                return requests.get(url, timeout=self.http_timeout,
+                                    allow_redirects=True, verify=False)
+            except requests.RequestException as e:
+                if not transient or not isinstance(e, transient):
+                    raise
+                if attempt == self.http_retries:
+                    raise
+                self.http_probe_retries += 1
+
     def validate(self, subdomain, check_http=True):
         """Check if a subdomain resolves and optionally has a working web service.
 
@@ -315,7 +368,9 @@ class Validator:
         DNS resolution results (CNAME chain + A records) are cached per
         FQDN: validating the same name twice -- as the brute-force and
         validation phases do -- performs the DNS lookups only once. The
-        HTTP probe is not cached and always runs fresh.
+        HTTP probe is not cached and always runs fresh; each protocol's
+        probe is retried once on transient connection errors or
+        timeouts before the host is marked "No HTTP".
 
         The HTTP probe always targets the original ``subdomain`` (so
         the Host header and TLS SNI stay correct), not the CNAME
@@ -339,12 +394,15 @@ class Validator:
             if not check_http:
                 return ips, "N/A", alias
 
-            # Now, check for a working HTTP/HTTPS response
+            # Now, check for a working HTTP/HTTPS response. Each
+            # protocol's probe is retried once on transient failures
+            # (connection error / timeout) inside _probe_http, so a
+            # flaky network does not mark a live host "No HTTP".
             for protocol in ["https", "http"]:
                 try:
                     url = f"{protocol}://{subdomain}"
                     # Use a short timeout to keep it fast
-                    response = requests.get(url, timeout=self.http_timeout, allow_redirects=True, verify=False)
+                    response = self._probe_http(url)
 
                     # Consider it "working" if it returns a success or redirect code
                     if 200 <= response.status_code < 400:

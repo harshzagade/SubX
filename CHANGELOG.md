@@ -6,6 +6,16 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- HTTP probe retry: each HTTPS/HTTP probe is retried once on a
+  transient connection error or timeout before the host is marked
+  `No HTTP`, so a flaky network no longer kills live hosts.
+  Non-transient failures (TLS errors, redirect loops) still fall
+  through to the next protocol immediately. New
+  `Validator._probe_http()` with a `http_retries` parameter
+  (default 1, 0 disables) and a `--http-retries` CLI flag;
+  retries are counted in `Validator.http_probe_retries` and
+  reported in the scan summary. 7 new stub-based tests in
+  `tests/test_http_retry.py`; README usage and options updated.
 - `--resolver IP` CLI flag: all DNS queries go to a custom resolver
   (e.g. `1.1.1.1`) instead of the system resolver. `Validator`
   validates the IP up front with the stdlib `ipaddress` module
