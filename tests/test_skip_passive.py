@@ -166,7 +166,7 @@ def test_passive_word_skipped_in_brute_force_but_kept_as_both(
             return (["93.184.216.34"], 200, None)
 
     class FakeEnumerator:
-        def __init__(self, domain):
+        def __init__(self, domain, source_timeout=None):
             self.domain = domain
             self.log = None
 
@@ -187,6 +187,9 @@ def test_passive_word_skipped_in_brute_force_but_kept_as_both(
         timeout=5.0,
         http_timeout=3.0,
         dns_retries=1,
+        http_retries=1,
+        source_timeout=15.0,
+        resolver=None,
         output=str(out_file),
         no_passive=False,
         no_brute=False,

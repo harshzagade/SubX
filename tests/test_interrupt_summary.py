@@ -201,8 +201,8 @@ def _run_main(monkeypatch, tmp_path, words, fail_on_call):
 
 def _main_kwargs(wordlist, out_file):
     # main(domain, wordlist, threads, timeout, http_timeout, dns_retries,
-    #      output, no_passive, no_brute, exclude_sub, no_http, only_live,
-    #      verbose, quiet)
+    #      http_retries, source_timeout, resolver, output, no_passive,
+    #      no_brute, exclude_sub, no_http, only_live, verbose, quiet)
     return dict(
         domain="example.com",
         wordlist=str(wordlist),
@@ -210,6 +210,9 @@ def _main_kwargs(wordlist, out_file):
         timeout=5.0,
         http_timeout=3.0,
         dns_retries=1,
+        http_retries=1,
+        source_timeout=15.0,
+        resolver=None,
         output=str(out_file),
         no_passive=True,
         no_brute=False,
