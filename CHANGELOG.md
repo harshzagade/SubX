@@ -6,6 +6,21 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Subdomain-takeover hints: when a candidate's CNAME alias points at
+  a hosting service with a known dangling-record takeover vector
+  (GitHub Pages, Heroku, AWS S3, Azure, Netlify, Vercel, Shopify,
+  and more), the row is flagged as a possible takeover. New
+  stdlib-only `subx/takeover.py` (`takeover_hint()` with suffix
+  matching, specific suffixes beating generic ones, spoofed
+  suffixes rejected) wired into `render_results()`: a `Takeover`
+  column in the table (only when at least one row is flagged), a
+  `takeover` field in JSON output, a `Takeover` column in CSV, a
+  note in text output, and a summary count. Purely local pattern
+  matching on the already-resolved alias -- no extra requests, and
+  a hint is not proof of a takeable subdomain. 10 new tests in
+  `tests/test_takeover.py` (including render-level JSON/txt/summary
+  checks with stubbed click/rich/dns); README and CHANGELOG
+  updated.
 - HTTP probe retry: each HTTPS/HTTP probe is retried once on a
   transient connection error or timeout before the host is marked
   `No HTTP`, so a flaky network no longer kills live hosts.

@@ -17,6 +17,7 @@ from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
 from .wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
 from .results import dedupe_results, sort_results, filter_live_results
+from .takeover import takeover_hint
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
 
@@ -63,6 +64,12 @@ def render_results(console, log, results, found_subdomains, validator,
             if hidden:
                 log.info(f"[dim]--only-live: hid {hidden} DNS-only row(s); showing {len(results)} live.[/dim]")
 
+        # Takeover hints are derived from the CNAME alias each row
+        # already carries -- no extra requests, just a pattern match
+        # against known dangling-service suffixes. Computed once here
+        # so the table, summary, and saved files all agree.
+        hints = [takeover_hint(r[4]) for r in results]
+
         if quiet:
             for sub, status, source, ips, alias in results:
                 console.print(sub)
@@ -80,8 +87,12 @@ def render_results(console, log, results, found_subdomains, validator,
             table.add_column("Source", style="dim white", min_width=15)
             table.add_column("IP Addresses", style="dim green")
             table.add_column("CNAME", style="dim cyan")
+            # The Takeover column only appears when at least one row
+            # carries a hint, so clean scans keep the old narrow table.
+            if any(hints):
+                table.add_column("Takeover", style="bold yellow")
 
-            for sub, status, source, ips, alias in results:
+            for (sub, status, source, ips, alias), hint in zip(results, hints):
                 # Colorize status
                 status_styled = status
                 if status == "200":
@@ -95,7 +106,10 @@ def render_results(console, log, results, found_subdomains, validator,
                 else:
                     status_styled = f"[bold red]{status}[/bold red]"
 
-                table.add_row(sub, status_styled, source, ips, alias or "")
+                row = [sub, status_styled, source, ips, alias or ""]
+                if any(hints):
+                    row.append(f"possible: {hint}" if hint else "")
+                table.add_row(*row)
 
             console.print("\n[bold white]RESULTS[/bold white]")
             console.print(table)
@@ -113,25 +127,32 @@ def render_results(console, log, results, found_subdomains, validator,
                 console.print(f"[dim]Reused {validator.dns_cache_hits} cached DNS result(s) across phases.[/dim]")
             if getattr(validator, "http_probe_retries", 0):
                 console.print(f"[dim]Retried {validator.http_probe_retries} transient HTTP probe failure(s).[/dim]")
+            takeover_count = sum(1 for h in hints if h)
+            if takeover_count:
+                console.print(f"[dim]Flagged {takeover_count} possible subdomain takeover(s) -- "
+                              f"CNAME pattern match only, verify the hosted resource is gone before acting.[/dim]")
 
         # 5. Output to file
         if output:
             try:
                 if output.endswith('.json'):
-                    data = [{"subdomain": r[0], "status": r[1], "source": r[2], "ips": r[3], "cname": r[4] or None} for r in results]
+                    data = [{"subdomain": r[0], "status": r[1], "source": r[2], "ips": r[3], "cname": r[4] or None,
+                             "takeover": hint} for r, hint in zip(results, hints)]
                     with open(output, 'w') as f:
                         json.dump(data, f, indent=4)
                 elif output.endswith('.csv'):
                     with open(output, 'w', newline='') as f:
                         writer = csv.writer(f)
-                        writer.writerow(["Subdomain", "Status", "Source", "IP Addresses", "CNAME"])
-                        writer.writerows(results)
+                        writer.writerow(["Subdomain", "Status", "Source", "IP Addresses", "CNAME", "Takeover"])
+                        writer.writerows([(*r, hint or "") for r, hint in zip(results, hints)])
                 else:
                     with open(output, 'w') as f:
-                        for r in results:
+                        for r, hint in zip(results, hints):
                             line = f"{r[0]} ({r[1]}) - {r[3]}"
                             if r[4]:
                                 line += f" -> {r[4]}"
+                            if hint:
+                                line += f" [possible takeover: {hint}]"
                             f.write(line + "\n")
                 log.info(f"Results saved to [bold underline]{output}[/bold underline]")
             except Exception as e:
