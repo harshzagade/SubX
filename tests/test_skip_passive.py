@@ -213,7 +213,7 @@ def test_passive_word_skipped_in_brute_force_but_kept_as_both(
     ]
 
     data = json.loads(out_file.read_text())
-    by_sub = {row["subdomain"]: row["source"] for row in data}
+    by_sub = {row["subdomain"]: row["source"] for row in data["results"]}
     assert by_sub == {
         "api.example.com": "Passive",
         "ftp.example.com": "Brute",

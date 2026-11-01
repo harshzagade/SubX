@@ -31,6 +31,7 @@
   - Status per subdomain: HTTP status code, `No HTTP` (resolves, no web service), or `N/A` (HTTP checks skipped)
   - IP address resolution and grouping per subdomain
   - `--only-live` shows only subdomains with a working HTTP service, hiding DNS-only rows — ideal for recon pipelines
+  - `--exclude-status 403,404` hides results with those HTTP status codes, applied after dedupe — ideal for cutting 403/404 noise from pipelines
 
 ---
 
@@ -257,6 +258,8 @@ enumeration control:
   --exclude-sub GLOB   Skip brute-force candidates matching the glob (repeatable)
   --no-http            Skip HTTP/HTTPS service validation
   --only-live          Show only subdomains with a working HTTP service (hides DNS-only rows)
+  --exclude-status CODES
+                       Hide results whose HTTP status is in the comma-separated list (e.g. "403,404")
 
 output & logging:
   -o, --output FILE    Save results to file (.json, .csv, .txt)
@@ -277,15 +280,31 @@ files all show the same clean list.
 
 ### JSON
 ```json
-[
-  {
-    "subdomain": "api.example.com",
-    "status": "200",
-    "source": "Brute",
-    "ips": "104.20.23.154, 172.66.147.243"
+{
+  "results": [
+    {
+      "subdomain": "api.example.com",
+      "status": "200",
+      "source": "Brute",
+      "ips": "104.20.23.154, 172.66.147.243",
+      "cname": null,
+      "takeover": null
+    }
+  ],
+  "stats": {
+    "duration_seconds": 12.34,
+    "candidates_collected": 42,
+    "validated": 18,
+    "wildcard_filtered": 2,
+    "dns_cache_hits": 7
   }
-]
+}
 ```
+The `stats` block reports scan totals for pipeline consumers:
+wall-clock duration, candidates collected across phases, rows
+validation produced (before `--only-live`/`--exclude-status`
+display filtering), wildcard false positives dropped, and DNS
+results reused from the cache.
 
 ### CSV
 ```csv
@@ -317,7 +336,7 @@ subx example.com -q | nuclei -t vulnerabilities/
 ### Export for further analysis
 ```bash
 subx example.com -o subs.json
-jq -r '.[].subdomain' subs.json | httprobe
+jq -r '.results[].subdomain' subs.json | httprobe
 ```
 
 ---

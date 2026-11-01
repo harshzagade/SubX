@@ -242,8 +242,8 @@ def test_interrupt_mid_scan_renders_partial_results_and_exits_130(
 
     # The output file is still written with the partial results.
     data = json.loads(out_file.read_text())
-    assert len(data) == 1
-    assert data[0]["subdomain"] == "www.example.com"
+    assert len(data["results"]) == 1
+    assert data["results"][0]["subdomain"] == "www.example.com"
 
 
 def test_interrupt_during_validation_reports_collected_candidates(
@@ -276,7 +276,7 @@ def test_normal_path_has_no_interrupt_banner(monkeypatch, tmp_path):
     assert "interrupt" not in text.lower()
 
     data = json.loads(out_file.read_text())
-    assert sorted(r["subdomain"] for r in data) == [
+    assert sorted(r["subdomain"] for r in data["results"]) == [
         "mail.example.com",
         "www.example.com",
     ]

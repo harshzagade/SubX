@@ -16,7 +16,8 @@ from .enumerator import Enumerator
 from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
 from .wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
-from .results import dedupe_results, sort_results, filter_live_results
+from .results import (dedupe_results, sort_results, filter_live_results,
+                      parse_exclude_statuses, filter_excluded_statuses)
 from .takeover import takeover_hint
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
@@ -35,7 +36,8 @@ def get_default_wordlist():
         return os.path.join(base_dir, 'data', 'default_wordlist.txt')
 
 def render_results(console, log, results, found_subdomains, validator,
-                   output, only_live, quiet, start_time, interrupted=False):
+                   output, only_live, quiet, start_time, interrupted=False,
+                   exclude_status=None):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -56,6 +58,11 @@ def render_results(console, log, results, found_subdomains, validator,
         # table, quiet output, and saved files (-o) all show the same
         # clean, ordered list.
         results = sort_results(dedupe_results(results))
+        # Validated count is captured before the display filters
+        # (--only-live, --exclude-status) so the JSON stats block
+        # reports what validation actually produced, not what survived
+        # filtering for display.
+        validated_count = len(results)
 
         if only_live:
             live_total = len(results)
@@ -63,6 +70,14 @@ def render_results(console, log, results, found_subdomains, validator,
             hidden = live_total - len(results)
             if hidden:
                 log.info(f"[dim]--only-live: hid {hidden} DNS-only row(s); showing {len(results)} live.[/dim]")
+
+        if exclude_status:
+            status_total = len(results)
+            results = filter_excluded_statuses(results, exclude_status)
+            hidden = status_total - len(results)
+            if hidden:
+                log.info(f"[dim]--exclude-status: hid {hidden} row(s) with excluded status code(s); "
+                         f"showing {len(results)}.[/dim]")
 
         # Takeover hints are derived from the CNAME alias each row
         # already carries -- no extra requests, just a pattern match
@@ -136,8 +151,21 @@ def render_results(console, log, results, found_subdomains, validator,
         if output:
             try:
                 if output.endswith('.json'):
-                    data = [{"subdomain": r[0], "status": r[1], "source": r[2], "ips": r[3], "cname": r[4] or None,
-                             "takeover": hint} for r, hint in zip(results, hints)]
+                    data = {
+                        "results": [
+                            {"subdomain": r[0], "status": r[1], "source": r[2],
+                             "ips": r[3], "cname": r[4] or None,
+                             "takeover": hint}
+                            for r, hint in zip(results, hints)
+                        ],
+                        "stats": {
+                            "duration_seconds": round(duration, 2),
+                            "candidates_collected": len(found_subdomains),
+                            "validated": validated_count,
+                            "wildcard_filtered": getattr(validator, "wildcard_filtered", 0),
+                            "dns_cache_hits": getattr(validator, "dns_cache_hits", 0),
+                        },
+                    }
                     with open(output, 'w') as f:
                         json.dump(data, f, indent=4)
                 elif output.endswith('.csv'):
@@ -191,15 +219,24 @@ def render_results(console, log, results, found_subdomains, validator,
 @click.option('--no-http', is_flag=True, help='Skip HTTP/HTTPS status check.')
 @click.option('--only-live', is_flag=True,
               help='Show only subdomains with a working HTTP service (hide DNS-only rows).')
+@click.option('--exclude-status', default=None,
+              help='Comma-separated HTTP status codes to hide from results (e.g. "403,404"); applied after dedupe.')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
     if only_live and no_http:
         console.print("[bold red]--only-live requires the HTTP check; remove --no-http.[/bold red]")
         sys.exit(2)
+
+    if exclude_status:
+        try:
+            exclude_status = parse_exclude_statuses(exclude_status)
+        except ValueError as e:
+            console.print(f"[bold red]Invalid --exclude-status:[/bold red] {e}")
+            sys.exit(2)
 
     # Normalize the target up front: internationalized names become
     # punycode (stdlib only, no extra dependency) so every downstream
@@ -410,11 +447,13 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
 
         # 4. Results Display
         render_results(console, log, results, found_subdomains, validator,
-                       output, only_live, quiet, start_time)
+                       output, only_live, quiet, start_time,
+                       exclude_status=exclude_status)
 
     except KeyboardInterrupt:
         render_results(console, log, results, found_subdomains, validator,
-                       output, only_live, quiet, start_time, interrupted=True)
+                       output, only_live, quiet, start_time, interrupted=True,
+                       exclude_status=exclude_status)
         sys.exit(130)
 
 

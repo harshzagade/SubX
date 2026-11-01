@@ -207,8 +207,8 @@ def test_render_json_carries_takeover_hint(tmp_path):
         str(out_file), False, False, time.time(),
     )
     data = json.loads(out_file.read_text())
-    assert data[0]["takeover"] == "GitHub Pages"
-    assert data[1]["takeover"] is None
+    assert data["results"][0]["takeover"] == "GitHub Pages"
+    assert data["results"][1]["takeover"] is None
 
 
 def test_render_txt_appends_takeover_note(tmp_path):

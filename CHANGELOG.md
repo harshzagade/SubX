@@ -6,6 +6,22 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- JSON output gains a `stats` block: `{"results": [...], "stats":
+  {...}}` where stats carries `duration_seconds`,
+  `candidates_collected`, `validated` (rows validation produced,
+  before `--only-live`/`--exclude-status` display filtering),
+  `wildcard_filtered`, and `dns_cache_hits` for pipeline
+  consumers. Existing JSON assertions in the takeover, interrupt,
+  and skip-passive tests updated to the new shape; 2 new tests in
+  `tests/test_json_stats.py`; README JSON example updated.
+- `--exclude-status CODES` CLI flag: hides results whose HTTP status
+  is in the comma-separated list (e.g. `403,404`), applied after
+  dedupe/sort so a merged row's best status is what gets matched;
+  DNS-only rows (`No HTTP`/`N/A`) are never dropped, invalid codes
+  fail fast with exit 2, and the hidden count is logged like
+  `--only-live`. New stdlib-only `parse_exclude_statuses()` /
+  `filter_excluded_statuses()` in `subx/results.py`; 6 new tests in
+  `tests/test_exclude_status.py`; README updated.
 - Subdomain-takeover hints: when a candidate's CNAME alias points at
   a hosting service with a known dangling-record takeover vector
   (GitHub Pages, Heroku, AWS S3, Azure, Netlify, Vercel, Shopify,
