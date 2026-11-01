@@ -114,3 +114,37 @@ def filter_live_results(results):
     merged rows stay consistent.
     """
     return [row for row in results if is_live_status(row[1])]
+
+
+def parse_exclude_statuses(value):
+    """Parse a comma-separated ``--exclude-status`` value into codes.
+
+    Each token must be a three-digit HTTP status code (100-999);
+    anything else raises ``ValueError`` so the CLI can fail fast
+    instead of silently filtering nothing. Returns a frozenset of
+    code strings, matching how statuses are stored on result rows.
+    """
+    codes = set()
+    for token in str(value).split(","):
+        token = token.strip()
+        if not token.isdigit() or not 100 <= int(token) <= 999:
+            raise ValueError(
+                f"invalid status code {token!r} in --exclude-status "
+                "(expected comma-separated codes like '403,404')"
+            )
+        codes.add(token)
+    if not codes:
+        raise ValueError("--exclude-status needs at least one status code")
+    return frozenset(codes)
+
+
+def filter_excluded_statuses(results, codes):
+    """Drop rows whose HTTP status is in ``codes``.
+
+    Used by ``--exclude-status``: hides e.g. 403/404 noise from
+    recon pipelines. Run after ``dedupe_results``/``sort_results``
+    so a merged row's best status is what gets matched, and
+    DNS-only rows (``"No HTTP"``/``"N/A"``) are never dropped --
+    they carry no numeric code to match.
+    """
+    return [row for row in results if str(row[1]) not in codes]
