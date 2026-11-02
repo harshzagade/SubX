@@ -17,7 +17,8 @@ from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
 from .wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
 from .results import (dedupe_results, sort_results, filter_live_results,
-                      parse_exclude_statuses, filter_excluded_statuses)
+                      parse_exclude_statuses, filter_excluded_statuses,
+                      parse_exclude_ip_networks, filter_excluded_ip_results)
 from .takeover import takeover_hint
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
@@ -37,7 +38,7 @@ def get_default_wordlist():
 
 def render_results(console, log, results, found_subdomains, validator,
                    output, only_live, quiet, start_time, interrupted=False,
-                   exclude_status=None):
+                   exclude_status=None, exclude_ip=None):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -77,6 +78,14 @@ def render_results(console, log, results, found_subdomains, validator,
             hidden = status_total - len(results)
             if hidden:
                 log.info(f"[dim]--exclude-status: hid {hidden} row(s) with excluded status code(s); "
+                         f"showing {len(results)}.[/dim]")
+
+        if exclude_ip:
+            ip_total = len(results)
+            results = filter_excluded_ip_results(results, exclude_ip)
+            hidden = ip_total - len(results)
+            if hidden:
+                log.info(f"[dim]--exclude-ip: hid {hidden} row(s) with an IP in an excluded range; "
                          f"showing {len(results)}.[/dim]")
 
         # Takeover hints are derived from the CNAME alias each row
@@ -221,9 +230,11 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Show only subdomains with a working HTTP service (hide DNS-only rows).')
 @click.option('--exclude-status', default=None,
               help='Comma-separated HTTP status codes to hide from results (e.g. "403,404"); applied after dedupe.')
+@click.option('--exclude-ip', default=None,
+              help='Comma-separated IPs/CIDR ranges to hide from results (e.g. "203.0.113.0/24"); applied after dedupe.')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -236,6 +247,13 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
             exclude_status = parse_exclude_statuses(exclude_status)
         except ValueError as e:
             console.print(f"[bold red]Invalid --exclude-status:[/bold red] {e}")
+            sys.exit(2)
+
+    if exclude_ip:
+        try:
+            exclude_ip = parse_exclude_ip_networks(exclude_ip)
+        except ValueError as e:
+            console.print(f"[bold red]Invalid --exclude-ip:[/bold red] {e}")
             sys.exit(2)
 
     # Normalize the target up front: internationalized names become
@@ -448,12 +466,12 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
         # 4. Results Display
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time,
-                       exclude_status=exclude_status)
+                       exclude_status=exclude_status, exclude_ip=exclude_ip)
 
     except KeyboardInterrupt:
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time, interrupted=True,
-                       exclude_status=exclude_status)
+                       exclude_status=exclude_status, exclude_ip=exclude_ip)
         sys.exit(130)
 
 

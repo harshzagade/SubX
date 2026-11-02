@@ -6,6 +6,15 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--exclude-ip IPS` CLI flag: hides results with a resolved IP inside
+  any comma-separated IP/CIDR range (e.g. `203.0.113.0/24`), applied
+  after dedupe/sort so a merged row is matched on its full IP union;
+  a bare IP counts as a single-host network, CIDRs with host bits set
+  and junk values fail fast with exit 2, and the hidden count is
+  logged like `--exclude-status`. New stdlib-only
+  `parse_exclude_ip_networks()` / `filter_excluded_ip_results()` in
+  `subx/results.py`; 5 new tests in `tests/test_exclude_ip.py`;
+  README updated.
 - JSON output gains a `stats` block: `{"results": [...], "stats":
   {...}}` where stats carries `duration_seconds`,
   `candidates_collected`, `validated` (rows validation produced,

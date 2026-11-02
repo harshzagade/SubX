@@ -32,6 +32,7 @@
   - IP address resolution and grouping per subdomain
   - `--only-live` shows only subdomains with a working HTTP service, hiding DNS-only rows — ideal for recon pipelines
   - `--exclude-status 403,404` hides results with those HTTP status codes, applied after dedupe — ideal for cutting 403/404 noise from pipelines
+  - `--exclude-ip 203.0.113.0/24` hides results whose resolved IPs fall in the given ranges — ideal for cutting CDN-blanketed noise from pipelines
 
 ---
 
@@ -260,6 +261,7 @@ enumeration control:
   --only-live          Show only subdomains with a working HTTP service (hides DNS-only rows)
   --exclude-status CODES
                        Hide results whose HTTP status is in the comma-separated list (e.g. "403,404")
+  --exclude-ip IPS     Hide results with a resolved IP in the comma-separated IP/CIDR list (e.g. "203.0.113.0/24")
 
 output & logging:
   -o, --output FILE    Save results to file (.json, .csv, .txt)

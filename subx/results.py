@@ -11,6 +11,8 @@ results table, quiet output, and the saved files (-o/--output) all show
 one clean, ordered list.
 """
 
+import ipaddress
+
 
 def normalize_subdomain(sub):
     """Return the canonical spelling of a subdomain.
@@ -148,3 +150,72 @@ def filter_excluded_statuses(results, codes):
     they carry no numeric code to match.
     """
     return [row for row in results if str(row[1]) not in codes]
+
+
+def parse_exclude_ip_networks(value):
+    """Parse a comma-separated ``--exclude-ip`` value into networks.
+
+    Each token is a CIDR range (``203.0.113.0/24``) or a bare IP
+    (``203.0.113.7``, treated as a single-host network). CIDRs with
+    host bits set (``203.0.113.7/24``) are rejected so a typo does not
+    silently widen the filter; anything unparseable raises
+    ``ValueError`` so the CLI can fail fast instead of filtering
+    nothing. Returns a tuple of ``ipaddress`` network objects.
+    """
+    networks = []
+    for token in str(value).split(","):
+        token = token.strip()
+        if not token:
+            raise ValueError(
+                "--exclude-ip needs at least one IP or CIDR "
+                "(expected comma-separated values like "
+                "'203.0.113.0/24,198.51.100.7')"
+            )
+        try:
+            if "/" in token:
+                networks.append(ipaddress.ip_network(token, strict=True))
+            else:
+                networks.append(ipaddress.ip_network(ipaddress.ip_address(token)))
+        except ValueError:
+            raise ValueError(
+                f"invalid IP or CIDR {token!r} in --exclude-ip "
+                "(expected values like '203.0.113.0/24' or '203.0.113.7')"
+            ) from None
+    if not networks:
+        raise ValueError("--exclude-ip needs at least one IP or CIDR")
+    return tuple(networks)
+
+
+def _row_ip_in_networks(ips, networks):
+    """True when any resolved IP in a row's IP column is filtered.
+
+    The IP column is a comma-separated string (A records first, then
+    AAAA). Unparseable tokens are ignored rather than dropping the
+    row, and IPv4 addresses are never matched against IPv6 networks
+    (or vice versa).
+    """
+    for chunk in str(ips).split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            addr = ipaddress.ip_address(chunk)
+        except ValueError:
+            continue
+        for net in networks:
+            if addr.version == net.version and addr in net:
+                return True
+    return False
+
+
+def filter_excluded_ip_results(results, networks):
+    """Drop rows with a resolved IP inside any of ``networks``.
+
+    Used by ``--exclude-ip``: hides e.g. CDN ranges that blanket a
+    target. A row is dropped when ANY of its IPs matches, so a host
+    with one CDN IP and one origin IP is still hidden -- the row's IP
+    set is what the pipeline sees. Run after
+    ``dedupe_results``/``sort_results`` so merged rows are matched on
+    their full IP union.
+    """
+    return [row for row in results if not _row_ip_in_networks(row[3], networks)]
