@@ -15,6 +15,12 @@ All notable changes to SubX are documented here. Format follows
   `parse_exclude_ip_networks()` / `filter_excluded_ip_results()` in
   `subx/results.py`; 5 new tests in `tests/test_exclude_ip.py`;
   README updated.
+- `--no-wildcard-check` CLI flag: skips the wildcard-detection probes
+  entirely for targets already known to be non-wildcard, saving two
+  DNS queries per scan; `validator.wildcard_ips` stays empty so the
+  validation-phase filter lets everything through. 2 new stub-based
+  end-to-end tests in `tests/test_no_wildcard_check.py` driving the
+  real `main()`; README updated.
 - JSON output gains a `stats` block: `{"results": [...], "stats":
   {...}}` where stats carries `duration_seconds`,
   `candidates_collected`, `validated` (rows validation produced,

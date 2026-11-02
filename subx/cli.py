@@ -232,9 +232,11 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Comma-separated HTTP status codes to hide from results (e.g. "403,404"); applied after dedupe.')
 @click.option('--exclude-ip', default=None,
               help='Comma-separated IPs/CIDR ranges to hide from results (e.g. "203.0.113.0/24"); applied after dedupe.')
+@click.option('--no-wildcard-check', is_flag=True,
+              help='Skip wildcard detection entirely (for targets already known to be non-wildcard).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -293,17 +295,24 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
 
     try:
         # 0. Wildcard Detection
-        if not quiet:
-            with console.status("[dim]Checking wildcard...[/dim]"):
+        if no_wildcard_check:
+            # Targets already known to be non-wildcard skip both probe
+            # queries; validator.wildcard_ips stays empty, so the
+            # validation-phase filter lets everything through.
+            wildcard_ips = set()
+            log.info("[bold blue]i[/bold blue] Wildcard check skipped (--no-wildcard-check)")
+        else:
+            if not quiet:
+                with console.status("[dim]Checking wildcard...[/dim]"):
+                    wildcard_ips = validator.detect_wildcard(domain)
+            else:
                 wildcard_ips = validator.detect_wildcard(domain)
-        else:
-            wildcard_ips = validator.detect_wildcard(domain)
 
-        if wildcard_ips:
-            log.warning(f"[bold yellow]![/bold yellow] Wildcard detected: [dim]{', '.join(wildcard_ips)}[/dim]")
-            validator.wildcard_ips = wildcard_ips
-        else:
-            log.info("[bold blue]i[/bold blue] No wildcard detected")
+            if wildcard_ips:
+                log.warning(f"[bold yellow]![/bold yellow] Wildcard detected: [dim]{', '.join(wildcard_ips)}[/dim]")
+                validator.wildcard_ips = wildcard_ips
+            else:
+                log.info("[bold blue]i[/bold blue] No wildcard detected")
 
         # 1. Passive Enumeration
         if not no_passive:
