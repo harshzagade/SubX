@@ -6,6 +6,14 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--titles` CLI flag: records the HTML `<title>` of each live host
+  in a new results column (Title column in the table, `title` field in
+  JSON, Title column in CSV, `| title` suffix in txt); one extra GET
+  per live row via a new `Validator.fetch_title()` (HTTPS first, then
+  HTTP, reusing the probe's transient retry), failures leave the field
+  blank, titles are entity-unescaped, whitespace-collapsed and cut to
+  80 characters; `--titles` + `--no-http` fails fast with exit 2.
+  13 new tests in `tests/test_titles.py`; README updated.
 - `--exclude-ip IPS` CLI flag: hides results with a resolved IP inside
   any comma-separated IP/CIDR range (e.g. `203.0.113.0/24`), applied
   after dedupe/sort so a merged row is matched on its full IP union;

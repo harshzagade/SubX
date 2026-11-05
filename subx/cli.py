@@ -17,6 +17,7 @@ from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
 from .wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
 from .results import (dedupe_results, sort_results, filter_live_results,
+                      is_live_status,
                       parse_exclude_statuses, filter_excluded_statuses,
                       parse_exclude_ip_networks, filter_excluded_ip_results)
 from .takeover import takeover_hint
@@ -38,7 +39,7 @@ def get_default_wordlist():
 
 def render_results(console, log, results, found_subdomains, validator,
                    output, only_live, quiet, start_time, interrupted=False,
-                   exclude_status=None, exclude_ip=None):
+                   exclude_status=None, exclude_ip=None, titles=None):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -46,6 +47,11 @@ def render_results(console, log, results, found_subdomains, validator,
     (naming how many candidates were validated before the interrupt)
     and the output file is still written, so an interrupted scan no
     longer drops everything it found.
+
+    ``titles`` maps subdomains to their recorded HTML ``<title>``
+    (``--titles``); rows without one get an empty title. The Title
+    column only appears in the table when at least one title was
+    recorded, so scans without ``--titles`` keep the old table.
     """
     duration = time.time() - start_time
     if results:
@@ -93,6 +99,11 @@ def render_results(console, log, results, found_subdomains, validator,
         # against known dangling-service suffixes. Computed once here
         # so the table, summary, and saved files all agree.
         hints = [takeover_hint(r[4]) for r in results]
+        # Titles were fetched during validation (one extra GET per live
+        # row); rows without one simply show blank, exactly like the
+        # Takeover column's opt-in behaviour.
+        titles = titles or {}
+        show_titles = any(titles.get(r[0]) for r in results)
 
         if quiet:
             for sub, status, source, ips, alias in results:
@@ -115,6 +126,10 @@ def render_results(console, log, results, found_subdomains, validator,
             # carries a hint, so clean scans keep the old narrow table.
             if any(hints):
                 table.add_column("Takeover", style="bold yellow")
+            # Same opt-in rule for the Title column: only when at least
+            # one live host actually yielded a title.
+            if show_titles:
+                table.add_column("Title", style="dim white")
 
             for (sub, status, source, ips, alias), hint in zip(results, hints):
                 # Colorize status
@@ -133,6 +148,8 @@ def render_results(console, log, results, found_subdomains, validator,
                 row = [sub, status_styled, source, ips, alias or ""]
                 if any(hints):
                     row.append(f"possible: {hint}" if hint else "")
+                if show_titles:
+                    row.append(titles.get(sub, ""))
                 table.add_row(*row)
 
             console.print("\n[bold white]RESULTS[/bold white]")
@@ -155,6 +172,9 @@ def render_results(console, log, results, found_subdomains, validator,
             if takeover_count:
                 console.print(f"[dim]Flagged {takeover_count} possible subdomain takeover(s) -- "
                               f"CNAME pattern match only, verify the hosted resource is gone before acting.[/dim]")
+            title_count = sum(1 for r in results if titles.get(r[0]))
+            if title_count:
+                console.print(f"[dim]Recorded {title_count} page title(s).[/dim]")
 
         # 5. Output to file
         if output:
@@ -164,7 +184,8 @@ def render_results(console, log, results, found_subdomains, validator,
                         "results": [
                             {"subdomain": r[0], "status": r[1], "source": r[2],
                              "ips": r[3], "cname": r[4] or None,
-                             "takeover": hint}
+                             "takeover": hint,
+                             "title": titles.get(r[0]) or None}
                             for r, hint in zip(results, hints)
                         ],
                         "stats": {
@@ -180,8 +201,8 @@ def render_results(console, log, results, found_subdomains, validator,
                 elif output.endswith('.csv'):
                     with open(output, 'w', newline='') as f:
                         writer = csv.writer(f)
-                        writer.writerow(["Subdomain", "Status", "Source", "IP Addresses", "CNAME", "Takeover"])
-                        writer.writerows([(*r, hint or "") for r, hint in zip(results, hints)])
+                        writer.writerow(["Subdomain", "Status", "Source", "IP Addresses", "CNAME", "Takeover", "Title"])
+                        writer.writerows([(*r, hint or "", titles.get(r[0], "")) for r, hint in zip(results, hints)])
                 else:
                     with open(output, 'w') as f:
                         for r, hint in zip(results, hints):
@@ -190,6 +211,8 @@ def render_results(console, log, results, found_subdomains, validator,
                                 line += f" -> {r[4]}"
                             if hint:
                                 line += f" [possible takeover: {hint}]"
+                            if titles.get(r[0]):
+                                line += f" | {titles[r[0]]}"
                             f.write(line + "\n")
                 log.info(f"Results saved to [bold underline]{output}[/bold underline]")
             except Exception as e:
@@ -234,14 +257,20 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Comma-separated IPs/CIDR ranges to hide from results (e.g. "203.0.113.0/24"); applied after dedupe.')
 @click.option('--no-wildcard-check', is_flag=True,
               help='Skip wildcard detection entirely (for targets already known to be non-wildcard).')
+@click.option('--titles', 'fetch_titles', is_flag=True,
+              help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
     if only_live and no_http:
         console.print("[bold red]--only-live requires the HTTP check; remove --no-http.[/bold red]")
+        sys.exit(2)
+
+    if fetch_titles and no_http:
+        console.print("[bold red]--titles requires the HTTP check; remove --no-http.[/bold red]")
         sys.exit(2)
 
     if exclude_status:
@@ -292,6 +321,10 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     # Validated rows, kept outside the try so a KeyboardInterrupt
     # still renders and saves what was found before the interrupt.
     results = []
+    # Titles recorded for live hosts (--titles), keyed by subdomain.
+    # Kept outside the try alongside `results` so an interrupt still
+    # renders and saves the titles collected before it.
+    titles = {}
 
     try:
         # 0. Wildcard Detection
@@ -445,6 +478,11 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
             val = validator.validate(sub, check_http=not no_http)
             if val:
                 ips, status, alias = val
+                # Titles are fetched only for live hosts: one extra
+                # GET per live row, and a blank title on any failure
+                # (fetch_title never raises for HTTP/DNS trouble).
+                if fetch_titles and is_live_status(status):
+                    titles[sub] = validator.fetch_title(sub)
                 return (sub, str(status), source, ", ".join(ips), alias or "")
             return None
 
@@ -475,12 +513,14 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
         # 4. Results Display
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time,
-                       exclude_status=exclude_status, exclude_ip=exclude_ip)
+                       exclude_status=exclude_status, exclude_ip=exclude_ip,
+                       titles=titles)
 
     except KeyboardInterrupt:
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time, interrupted=True,
-                       exclude_status=exclude_status, exclude_ip=exclude_ip)
+                       exclude_status=exclude_status, exclude_ip=exclude_ip,
+                       titles=titles)
         sys.exit(130)
 
 

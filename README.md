@@ -34,6 +34,7 @@
   - `--exclude-status 403,404` hides results with those HTTP status codes, applied after dedupe — ideal for cutting 403/404 noise from pipelines
   - `--exclude-ip 203.0.113.0/24` hides results whose resolved IPs fall in the given ranges — ideal for cutting CDN-blanketed noise from pipelines
   - `--no-wildcard-check` skips the wildcard-detection probes entirely for targets already known to be non-wildcard
+  - `--titles` records each live host's HTML `<title>` in a new results column (one extra GET per live row, blank on any failure) — handy for telling lookalike subdomains apart at a glance
 
 ---
 
@@ -264,6 +265,7 @@ enumeration control:
                        Hide results whose HTTP status is in the comma-separated list (e.g. "403,404")
   --exclude-ip IPS     Hide results with a resolved IP in the comma-separated IP/CIDR list (e.g. "203.0.113.0/24")
   --no-wildcard-check  Skip wildcard detection entirely (for targets already known to be non-wildcard)
+  --titles             Record the HTML <title> of each live host in a new results column (one extra GET per live row)
 
 output & logging:
   -o, --output FILE    Save results to file (.json, .csv, .txt)
@@ -292,7 +294,8 @@ files all show the same clean list.
       "source": "Brute",
       "ips": "104.20.23.154, 172.66.147.243",
       "cname": null,
-      "takeover": null
+      "takeover": null,
+      "title": "Example Site"
     }
   ],
   "stats": {

@@ -1,9 +1,10 @@
 import dns.resolver
+import html
 import ipaddress
 import requests
 import random
-import string
 import re
+import string
 import threading
 
 #: ASCII hostname check applied after punycode conversion, so garbage
@@ -16,6 +17,37 @@ _ASCII_HOSTNAME_RE = re.compile(
 #: definitively did not resolve. A dedicated object (not ``None``)
 #: distinguishes "looked up, found nothing" from "never looked up".
 _DNS_MISS = object()
+
+#: Maximum length of a recorded page title. Titles are a recon label,
+#: not a document dump, so anything longer is cut rather than widening
+#: the results table.
+TITLE_MAX_LENGTH = 80
+
+#: Bytes of a probe response body scanned for a ``<title>``. Titles
+#: live in ``<head>``, so 64 KiB is plenty and bounds the work on huge
+#: pages instead of decoding the whole body.
+_TITLE_SCAN_BYTES = 65536
+
+#: Matches a page's ``<title>`` element. ``<title>`` content is raw
+#: text by spec, but the strip step below tolerates stray markup.
+_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+
+
+def extract_title(html_text):
+    """Extract a page's ``<title>`` text, or ``""`` when there is none.
+
+    HTML entities are unescaped (``&amp;`` becomes ``&``), runs of
+    whitespace collapse to single spaces, and the result is cut to
+    :data:`TITLE_MAX_LENGTH` characters so one long title cannot
+    stretch the results table.
+    """
+    match = _TITLE_RE.search(html_text)
+    if not match:
+        return ""
+    title = re.sub(r"<[^>]+>", "", match.group(1))
+    title = html.unescape(title)
+    title = " ".join(title.split())
+    return title[:TITLE_MAX_LENGTH]
 
 
 def to_ascii_domain(name):
@@ -350,6 +382,29 @@ class Validator:
                 if attempt == self.http_retries:
                     raise
                 self.http_probe_retries += 1
+
+    def fetch_title(self, subdomain):
+        """Fetch ``subdomain``'s HTML ``<title>`` (``""`` when unavailable).
+
+        One extra GET per call -- the caller decides when a title is
+        worth it (live hosts only). Tries HTTPS first, then HTTP,
+        reusing the probe's transient-retry behaviour; any failure (no
+        HTTP service, a non-2xx/3xx status, a missing ``<title>``)
+        leaves the title blank instead of failing the scan. Only the
+        first 64 KiB of the body is scanned, since ``<title>`` lives
+        in ``<head>``.
+        """
+        subdomain = to_ascii_domain(subdomain)
+        for protocol in ("https", "http"):
+            try:
+                response = self._probe_http(f"{protocol}://{subdomain}")
+            except requests.RequestException:
+                continue
+            if 200 <= response.status_code < 400:
+                body = getattr(response, "content", b"") or b""
+                text = body[:_TITLE_SCAN_BYTES].decode("utf-8", errors="ignore")
+                return extract_title(text)
+        return ""
 
     def validate(self, subdomain, check_http=True):
         """Check if a subdomain resolves and optionally has a working web service.
