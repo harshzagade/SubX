@@ -35,6 +35,7 @@
   - `--exclude-ip 203.0.113.0/24` hides results whose resolved IPs fall in the given ranges — ideal for cutting CDN-blanketed noise from pipelines
   - `--no-wildcard-check` skips the wildcard-detection probes entirely for targets already known to be non-wildcard
   - `--titles` records each live host's HTML `<title>` in a new results column (one extra GET per live row, blank on any failure) — handy for telling lookalike subdomains apart at a glance
+  - `--doh URL` sends DNS queries to a DNS-over-HTTPS endpoint (e.g. Cloudflare's `https://dns.cloudflare.com/dns-query`) instead of UDP port 53 — for networks where port 53 is filtered
 
 ---
 
@@ -253,6 +254,7 @@ scan settings:
   --dns-retries NUM     Retry attempts per DNS query after a timeout (default: 1)
   --http-retries NUM    Retry attempts per HTTP/HTTPS probe after a transient connection error or timeout (default: 1)
   --resolver IP         Custom DNS resolver IP (e.g. 1.1.1.1) instead of the system resolver
+  --doh URL             DNS-over-HTTPS endpoint (e.g. https://dns.cloudflare.com/dns-query) instead of UDP DNS; cannot be combined with --resolver
   --source-timeout SEC  Timeout per passive-source request (default: 15.0)
 
 enumeration control:

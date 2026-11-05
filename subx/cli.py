@@ -243,6 +243,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Timeout in seconds for each passive-source HTTP request.')
 @click.option('--resolver', default=None,
               help='IP address of a custom DNS resolver (e.g. 1.1.1.1) instead of the system resolver.')
+@click.option('--doh', default=None,
+              help='DNS-over-HTTPS endpoint URL (e.g. https://dns.cloudflare.com/dns-query) instead of UDP DNS; cannot be combined with --resolver.')
 @click.option('--output', '-o', help='Path to output file (json, csv, or txt).')
 @click.option('--no-passive', is_flag=True, help='Skip passive enumeration.')
 @click.option('--no-brute', is_flag=True, help='Skip brute-force enumeration.')
@@ -261,7 +263,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -313,7 +315,7 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     try:
         validator = Validator(dns_timeout=timeout, http_timeout=http_timeout,
                               dns_retries=dns_retries, resolver_ip=resolver,
-                              http_retries=http_retries)
+                              http_retries=http_retries, doh_url=doh)
     except ValueError as e:
         console.print(f"[bold red]Invalid option:[/bold red] {e}")
         sys.exit(2)

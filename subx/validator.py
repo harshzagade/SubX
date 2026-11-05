@@ -6,6 +6,7 @@ import random
 import re
 import string
 import threading
+import urllib.parse
 
 #: ASCII hostname check applied after punycode conversion, so garbage
 #: input (spaces, empty labels) fails fast instead of hitting DNS.
@@ -109,7 +110,8 @@ class Validator:
     WILDCARD_PROBES = 2
 
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
-                 dns_retries=None, resolver_ip=None, http_retries=None):
+                 dns_retries=None, resolver_ip=None, http_retries=None,
+                 doh_url=None):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -146,6 +148,25 @@ class Validator:
                 raise ValueError(
                     f"resolver_ip must be a valid IP address, got {resolver_ip!r}"
                 ) from None
+        # DNS-over-HTTPS endpoint: an ``https://`` URL with a host,
+        # validated up front so garbage fails fast instead of breaking
+        # mid-scan. ``None`` keeps plain UDP DNS, exactly as before.
+        # A DoH endpoint and a custom resolver IP are two different
+        # transports for the same queries, so they cannot be combined.
+        self.doh_url = None
+        if doh_url is not None:
+            parsed = urllib.parse.urlparse(str(doh_url).strip())
+            if parsed.scheme != "https" or not parsed.netloc:
+                raise ValueError(
+                    f"doh_url must be an https:// URL with a host, "
+                    f"got {doh_url!r}"
+                )
+            self.doh_url = str(doh_url).strip()
+        if self.resolver_ip is not None and self.doh_url is not None:
+            raise ValueError(
+                "--resolver and --doh cannot be combined: pick one "
+                "DNS transport"
+            )
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -178,6 +199,38 @@ class Validator:
         self.resolver.timeout = dns_timeout
         self.resolver.lifetime = dns_timeout
 
+    def _resolve_doh(self, name, rdtype):
+        """Resolve ``name``/``rdtype`` over DNS-over-HTTPS.
+
+        Builds a DNS query message and sends it to ``self.doh_url``
+        with ``dns.query.https`` (dnspython's DoH transport), so scans
+        work on networks where UDP port 53 is filtered. The answer
+        RRsets are flattened to the same rdata list
+        ``resolver.resolve`` returns, so CNAME following and A/AAAA
+        handling work unchanged.
+
+        A DoH timeout surfaces as ``dns.exception.Timeout``; it is
+        converted to ``dns.resolver.Timeout`` so the retry loop in
+        :meth:`_resolve`, the no-cache rule in :meth:`_cached_dns`,
+        and the miss handling in :meth:`validate` all treat a slow
+        DoH endpoint exactly like a slow UDP resolver. An empty answer
+        raises ``NoAnswer``, matching the resolver's behaviour for a
+        name with no records of the requested type.
+        """
+        import dns.message
+        import dns.query
+
+        query = dns.message.make_query(name, rdtype)
+        try:
+            response = dns.query.https(self.doh_url, query,
+                                       timeout=self.dns_timeout)
+        except dns.exception.Timeout as e:
+            raise dns.resolver.Timeout(str(e)) from e
+        answers = [rdata for rrset in response.answer for rdata in rrset]
+        if not answers:
+            raise dns.resolver.NoAnswer()
+        return answers
+
     def _resolve(self, name, rdtype):
         """Resolve ``name``/``rdtype`` with retry on timeout.
 
@@ -186,10 +239,16 @@ class Validator:
         is retried up to ``dns_retries`` times. Definitive answers
         (NXDOMAIN, NoAnswer, other DNSErrors) are never retried and
         propagate immediately.
+
+        With a DoH endpoint configured, queries go over HTTPS instead
+        of UDP; the transport is chosen here so every caller (wildcard
+        probes, CNAME chains, A/AAAA lookups) uses it automatically.
         """
         last_error = None
         for _ in range(self.dns_retries + 1):
             try:
+                if self.doh_url is not None:
+                    return self._resolve_doh(name, rdtype)
                 return self.resolver.resolve(name, rdtype)
             except dns.resolver.Timeout as e:
                 last_error = e

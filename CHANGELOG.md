@@ -6,6 +6,15 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--doh URL` CLI flag: sends all DNS queries to a DNS-over-HTTPS
+  endpoint (e.g. `https://dns.cloudflare.com/dns-query`) via
+  dnspython's `dns.query.https`, for networks where UDP port 53 is
+  filtered; the URL must be `https://` with a host and fails fast
+  otherwise, `--resolver` + `--doh` is rejected as a conflict, DoH
+  timeouts are converted to `dns.resolver.Timeout` so the existing
+  retry loop and no-cache rule treat them like UDP timeouts, and an
+  empty answer raises `NoAnswer` like the resolver. 12 new tests in
+  `tests/test_doh.py`; README updated.
 - `--titles` CLI flag: records the HTML `<title>` of each live host
   in a new results column (Title column in the table, `title` field in
   JSON, Title column in CSV, `| title` suffix in txt); one extra GET
