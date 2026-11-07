@@ -6,6 +6,13 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- urlscan.io as a fourth passive source: `Enumerator._urlscan()`
+  queries the public search API (no key needed; anonymous use is
+  rate-limited) and collects each result's `page.domain`; only the
+  first page of results (up to 100) is read, and transient HTTP
+  failures are re-raised so the existing once-retry and
+  source-failure accounting treat it like the other sources.
+  7 new tests in `tests/test_urlscan.py`; README updated.
 - `--delay SECONDS` CLI flag: per-worker pause between probes for
   stealthy scans against rate-limited targets (mirrors DurbX's
   `--delay`); `Validator(delay=...)` sleeps before each candidate's

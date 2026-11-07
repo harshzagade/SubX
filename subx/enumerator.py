@@ -33,7 +33,8 @@ class Enumerator:
         sources = [
             ("crt.sh", self._crtsh),
             ("HackerTarget", self._hackertarget),
-            ("AlienVault", self._alienvault)
+            ("AlienVault", self._alienvault),
+            ("urlscan.io", self._urlscan)
         ]
 
         for name, func in sources:
@@ -99,6 +100,30 @@ class Enumerator:
                             # Final check: is it a valid domain format?
                             if domain_regex.match(sub):
                                 subdomains.add(sub)
+        except requests.RequestException:
+            raise
+        except Exception:
+            pass
+        return subdomains
+
+    def _urlscan(self):
+        """Query urlscan.io's search API for subdomains of the target.
+
+        The public search endpoint needs no API key (anonymous use is
+        rate-limited); only the first page of results (up to 100) is
+        read, matching the other sources' single-request behaviour.
+        Each result's ``page.domain`` is the scanned site's hostname.
+        """
+        subdomains = set()
+        url = f"https://urlscan.io/api/v1/search/?q=domain%3A{self.domain}"
+        try:
+            response = requests.get(url, timeout=self.source_timeout)
+            if response.status_code == 200:
+                data = response.json()
+                for entry in data.get('results', []):
+                    sub = entry.get('page', {}).get('domain', '').lower()
+                    if sub.endswith(self.domain):
+                        subdomains.add(sub)
         except requests.RequestException:
             raise
         except Exception:

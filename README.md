@@ -15,7 +15,7 @@
 ## ✨ Key Features
 
 - **🔍 Hybrid Discovery**
-  - **Passive enumeration:** queries crt.sh, HackerTarget, and AlienVault OTX APIs in parallel
+  - **Passive enumeration:** queries crt.sh, HackerTarget, AlienVault OTX, and urlscan.io APIs in parallel
   - **Active brute-forcing:** DNS resolution against a bundled wordlist of 84 common subdomains (or your own)
   - **Wildcard detection:** automatically detects wildcard DNS and filters out false positives
 - **⚡ Performance**
@@ -182,10 +182,11 @@ A real scan prints a rich results table with columns **Subdomain**, **Status**, 
 Before anything else, SubX probes two random 15-character subdomains of the target. A wildcard is declared only when at least two probes resolve AND agree on at least one IP — a single resolving probe is treated as an anycast fluke and ignored, so one stray answer can no longer poison the filter for the whole scan. The agreed wildcard IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally.
 
 ### 2. Passive Enumeration
-Three OSINT sources are queried in parallel (each with a configurable timeout, 15 seconds by default via `--source-timeout`; a source that fails with a transient HTTP error — connection error or timeout — is retried once, and a source that still fails is named in the scan summary's passive-source-failure count instead of silently disappearing):
+Four OSINT sources are queried in parallel (each with a configurable timeout, 15 seconds by default via `--source-timeout`; a source that fails with a transient HTTP error — connection error or timeout — is retried once, and a source that still fails is named in the scan summary's passive-source-failure count instead of silently disappearing):
 - **crt.sh** — Certificate Transparency logs; subdomain names are validated against a strict domain regex and wildcard entries (`*.example.com`) are excluded
 - **HackerTarget** — DNS record aggregation API
 - **AlienVault OTX** — passive DNS records
+- **urlscan.io** — website scan archive search (public search API, no key needed; first page of results, up to 100)
 
 All unique subdomains found are combined.
 
