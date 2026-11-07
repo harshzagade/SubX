@@ -6,6 +6,14 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--delay SECONDS` CLI flag: per-worker pause between probes for
+  stealthy scans against rate-limited targets (mirrors DurbX's
+  `--delay`); `Validator(delay=...)` sleeps before each candidate's
+  probe round (DNS + HTTP), so with N threads the aggregate rate is
+  roughly N/delay probes per second, and the pause applies even on
+  DNS misses so the rate stays steady. Negative values fail fast.
+  7 new tests in `tests/test_delay.py` (Validator-level plus
+  end-to-end CLI wiring driving the real `main()`); README updated.
 - `--doh URL` CLI flag: sends all DNS queries to a DNS-over-HTTPS
   endpoint (e.g. `https://dns.cloudflare.com/dns-query`) via
   dnspython's `dns.query.https`, for networks where UDP port 53 is

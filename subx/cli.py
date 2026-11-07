@@ -239,6 +239,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Retry attempts per DNS query after a timeout before a candidate is dropped.')
 @click.option('--http-retries', type=click.IntRange(min=0), default=1, show_default=True,
               help='Retry attempts per HTTP/HTTPS probe after a transient connection error or timeout.')
+@click.option('--delay', type=click.FloatRange(min=0), default=0.0, show_default=True,
+              help='Pause in seconds between probes per worker thread, for stealthy scans against rate-limited targets (mirrors DurbX --delay).')
 @click.option('--source-timeout', type=click.FloatRange(min=0.1), default=15.0, show_default=True,
               help='Timeout in seconds for each passive-source HTTP request.')
 @click.option('--resolver', default=None,
@@ -263,7 +265,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -315,7 +317,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     try:
         validator = Validator(dns_timeout=timeout, http_timeout=http_timeout,
                               dns_retries=dns_retries, resolver_ip=resolver,
-                              http_retries=http_retries, doh_url=doh)
+                              http_retries=http_retries, doh_url=doh,
+                              delay=delay)
     except ValueError as e:
         console.print(f"[bold red]Invalid option:[/bold red] {e}")
         sys.exit(2)

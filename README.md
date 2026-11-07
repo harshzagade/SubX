@@ -198,6 +198,8 @@ Case-variant duplicates in the wordlist (e.g. `Admin` and `admin`, common in wor
 
 Words already discovered by passive sources are skipped in the brute-force phase as well: probing `www.example.com` again when a passive source already returned it would spend a DNS lookup plus an HTTP probe for a candidate that is already known, and the validation phase validates every candidate exactly once anyway. Skipped candidates keep the **Both** source tag (the wordlist contained them too) — only the redundant probe is skipped, not the information. The skipped count is logged.
 
+For rate-limited targets, `--delay SECONDS` pauses each worker thread between candidates (mirrors DurbX's `--delay`): with N threads the aggregate rate is roughly N/delay probes per second. The pause happens before each candidate's probe round, even for names that turn out to be misses, so the rate stays steady instead of bunching up on the live names.
+
 ### 4. Validation
 Each candidate is resolved to its A records and its AAAA (IPv6) records and then probed: HTTPS first, then HTTP, with a 3-second timeout (configurable via `--http-timeout`). Each protocol's probe is retried once on a transient connection error or timeout (configurable via `--http-retries`, default 1, 0 disables) so a flaky network does not mark a live host `No HTTP`; non-transient probe failures fall through to the next protocol immediately, and retries are counted in the scan summary. A host with only AAAA records is a hit, not a miss, and the IP column shows A addresses followed by AAAA addresses; the wildcard filter drops a candidate only when *all* of its IPs (v4 and v6) are wildcard IPs, so a mixed unique-v4/wildcard-v6 host is kept. A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned.
 
@@ -253,6 +255,7 @@ scan settings:
   --http-timeout SEC    Timeout in seconds for each HTTP/HTTPS probe request (default: 3.0)
   --dns-retries NUM     Retry attempts per DNS query after a timeout (default: 1)
   --http-retries NUM    Retry attempts per HTTP/HTTPS probe after a transient connection error or timeout (default: 1)
+  --delay SEC           Pause in seconds between probes per worker thread, for stealthy scans against rate-limited targets (default: 0.0)
   --resolver IP         Custom DNS resolver IP (e.g. 1.1.1.1) instead of the system resolver
   --doh URL             DNS-over-HTTPS endpoint (e.g. https://dns.cloudflare.com/dns-query) instead of UDP DNS; cannot be combined with --resolver
   --source-timeout SEC  Timeout per passive-source request (default: 15.0)

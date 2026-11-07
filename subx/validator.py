@@ -6,6 +6,7 @@ import random
 import re
 import string
 import threading
+import time
 import urllib.parse
 
 #: ASCII hostname check applied after punycode conversion, so garbage
@@ -109,9 +110,13 @@ class Validator:
     #: domain is treated as wildcarded.
     WILDCARD_PROBES = 2
 
+    #: Pause (seconds) between probes when the caller does not pass an
+    #: explicit value. Zero means no pacing -- probes run back to back.
+    DEFAULT_DELAY = 0.0
+
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
                  dns_retries=None, resolver_ip=None, http_retries=None,
-                 doh_url=None):
+                 doh_url=None, delay=None):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -167,6 +172,17 @@ class Validator:
                 "--resolver and --doh cannot be combined: pick one "
                 "DNS transport"
             )
+        # Per-worker pause between probes, for stealthy scans against
+        # rate-limited targets (mirrors DurbX's --delay). Applied at
+        # the start of validate(), so each worker thread spaces its
+        # own candidate probes by at least this long; with N threads
+        # the aggregate rate is roughly N/delay probes per second.
+        # Zero (the default) means no pacing.
+        if delay is None:
+            delay = self.DEFAULT_DELAY
+        if delay < 0:
+            raise ValueError("delay must be non-negative")
+        self.delay = delay
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -486,11 +502,20 @@ class Validator:
         probe is retried once on transient connection errors or
         timeouts before the host is marked "No HTTP".
 
+        When ``delay`` is set, this call pauses first, so each worker
+        thread spaces its candidate probes by at least ``delay``
+        seconds -- the pacing that keeps a scan under a target's rate
+        limit. The pause happens even when the name turns out to be a
+        miss, so the rate stays steady instead of bunching up on the
+        live names.
+
         The HTTP probe always targets the original ``subdomain`` (so
         the Host header and TLS SNI stay correct), not the CNAME
         target.
         """
         subdomain = to_ascii_domain(subdomain)
+        if self.delay:
+            time.sleep(self.delay)
         try:
             # CNAME chain + A/AAAA records come from the per-FQDN cache, so
             # the validation phase reuses the brute-force phase's DNS
