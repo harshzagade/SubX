@@ -18,12 +18,15 @@ import json
 def load_resumed_results(path):
     """Read a previous SubX ``-o`` JSON output file for ``--resume``.
 
-    Returns ``(rows, titles)``: ``rows`` are the prior result rows as
-    (subdomain, status, source, ips, cname) tuples and ``titles`` maps
-    normalized subdomains to their recorded HTML ``<title>`` (only
-    rows that had one). Subdomains are normalized (lowercased,
-    trailing dot stripped) and duplicate spellings collapse to the
-    first row seen, matching how ``dedupe_results`` treats them.
+    Returns ``(rows, titles, final_urls)``: ``rows`` are the prior
+    result rows as (subdomain, status, source, ips, cname) tuples,
+    ``titles`` maps normalized subdomains to their recorded HTML
+    ``<title>`` (only rows that had one), and ``final_urls`` maps
+    normalized subdomains to the URL the probe landed on after
+    following redirects (only rows that had one). Subdomains are
+    normalized (lowercased, trailing dot stripped) and duplicate
+    spellings collapse to the first row seen, matching how
+    ``dedupe_results`` treats them.
 
     Raises ``OSError`` when the file cannot be read and ``ValueError``
     when it is not a SubX JSON output (bad JSON, wrong top-level
@@ -42,6 +45,7 @@ def load_resumed_results(path):
         )
     rows = []
     titles = {}
+    final_urls = {}
     seen = set()
     for entry in data["results"]:
         if not isinstance(entry, dict):
@@ -87,7 +91,10 @@ def load_resumed_results(path):
         title = entry.get("title")
         if isinstance(title, str) and title:
             titles[key] = title
-    return rows, titles
+        final_url = entry.get("final_url")
+        if isinstance(final_url, str) and final_url:
+            final_urls[key] = final_url
+    return rows, titles, final_urls
 
 
 def normalize_subdomain(sub):

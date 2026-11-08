@@ -41,7 +41,7 @@ def get_default_wordlist():
 def render_results(console, log, results, found_subdomains, validator,
                    output, only_live, quiet, start_time, interrupted=False,
                    exclude_status=None, exclude_ip=None, titles=None,
-                   resumed_count=0):
+                   resumed_count=0, final_urls=None):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -57,7 +57,10 @@ def render_results(console, log, results, found_subdomains, validator,
     ``resumed_count`` is how many rows came from a ``--resume`` file
     instead of this run's validation; it is reported in the JSON
     ``stats`` block so pipelines can tell fresh rows from resumed
-    ones.
+    ones. ``final_urls`` maps subdomains to the URL the probe landed
+    on after following redirects (only when it differs from the
+    probed URL); the Final URL column follows the same opt-in rule
+    as the Title column.
     """
     duration = time.time() - start_time
     if results:
@@ -110,6 +113,10 @@ def render_results(console, log, results, found_subdomains, validator,
         # Takeover column's opt-in behaviour.
         titles = titles or {}
         show_titles = any(titles.get(r[0]) for r in results)
+        # Final URLs were recorded during validation when a probe's
+        # redirect chain landed elsewhere; same opt-in rule as titles.
+        final_urls = final_urls or {}
+        show_final_urls = any(final_urls.get(r[0]) for r in results)
 
         if quiet:
             for sub, status, source, ips, alias in results:
@@ -136,6 +143,10 @@ def render_results(console, log, results, found_subdomains, validator,
             # one live host actually yielded a title.
             if show_titles:
                 table.add_column("Title", style="dim white")
+            # Same opt-in rule for the Final URL column: only when at
+            # least one probe actually landed somewhere else.
+            if show_final_urls:
+                table.add_column("Final URL", style="dim cyan")
 
             for (sub, status, source, ips, alias), hint in zip(results, hints):
                 # Colorize status
@@ -156,6 +167,8 @@ def render_results(console, log, results, found_subdomains, validator,
                     row.append(f"possible: {hint}" if hint else "")
                 if show_titles:
                     row.append(titles.get(sub, ""))
+                if show_final_urls:
+                    row.append(final_urls.get(sub, ""))
                 table.add_row(*row)
 
             console.print("\n[bold white]RESULTS[/bold white]")
@@ -181,6 +194,9 @@ def render_results(console, log, results, found_subdomains, validator,
             title_count = sum(1 for r in results if titles.get(r[0]))
             if title_count:
                 console.print(f"[dim]Recorded {title_count} page title(s).[/dim]")
+            final_count = sum(1 for r in results if final_urls.get(r[0]))
+            if final_count:
+                console.print(f"[dim]Recorded {final_count} final URL(s) after redirect(s).[/dim]")
 
         # 5. Output to file
         if output:
@@ -191,7 +207,8 @@ def render_results(console, log, results, found_subdomains, validator,
                             {"subdomain": r[0], "status": r[1], "source": r[2],
                              "ips": r[3], "cname": r[4] or None,
                              "takeover": hint,
-                             "title": titles.get(r[0]) or None}
+                             "title": titles.get(r[0]) or None,
+                             "final_url": final_urls.get(r[0]) or None}
                             for r, hint in zip(results, hints)
                         ],
                         "stats": {
@@ -213,8 +230,8 @@ def render_results(console, log, results, found_subdomains, validator,
                 elif output.endswith('.csv'):
                     with open(output, 'w', newline='') as f:
                         writer = csv.writer(f)
-                        writer.writerow(["Subdomain", "Status", "Source", "IP Addresses", "CNAME", "Takeover", "Title"])
-                        writer.writerows([(*r, hint or "", titles.get(r[0], "")) for r, hint in zip(results, hints)])
+                        writer.writerow(["Subdomain", "Status", "Source", "IP Addresses", "CNAME", "Takeover", "Title", "Final URL"])
+                        writer.writerows([(*r, hint or "", titles.get(r[0], ""), final_urls.get(r[0], "")) for r, hint in zip(results, hints)])
                 else:
                     with open(output, 'w') as f:
                         for r, hint in zip(results, hints):
@@ -225,6 +242,8 @@ def render_results(console, log, results, found_subdomains, validator,
                                 line += f" [possible takeover: {hint}]"
                             if titles.get(r[0]):
                                 line += f" | {titles[r[0]]}"
+                            if final_urls.get(r[0]):
+                                line += f" => {final_urls[r[0]]}"
                             f.write(line + "\n")
                 log.info(f"Results saved to [bold underline]{output}[/bold underline]")
             except Exception as e:
@@ -323,10 +342,11 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     # phase), and the prior rows are merged back into the results.
     resumed_rows = []
     resumed_titles = {}
+    resumed_final_urls = {}
     resumed_subs = set()
     if resume:
         try:
-            resumed_rows, resumed_titles = load_resumed_results(resume)
+            resumed_rows, resumed_titles, resumed_final_urls = load_resumed_results(resume)
         except (OSError, ValueError) as e:
             console.print(f"[bold red]Invalid --resume file:[/bold red] {e}")
             sys.exit(2)
@@ -363,6 +383,10 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     # the interrupt path can merge them too (an interrupt before the
     # resume-apply step leaves this empty, which is a safe no-op).
     resumed_applied = []
+    # Final URLs after redirects, keyed by subdomain: seeded from a
+    # --resume file for resumed rows, then updated from the validator
+    # after this run's validation phase (fresh values win).
+    final_urls = {}
 
     try:
         # 0. Wildcard Detection
@@ -533,6 +557,9 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                 title = resumed_titles.get(normalize_subdomain(row[0]))
                 if title:
                     titles[normalize_subdomain(row[0])] = title
+                final_url = resumed_final_urls.get(normalize_subdomain(row[0]))
+                if final_url:
+                    final_urls[normalize_subdomain(row[0])] = final_url
             if resumed_applied:
                 log.info(f"[bold blue]i[/bold blue] Resumed {len(resumed_applied)} previously validated subdomain(s) from [white]{resume}[/white]; skipping re-validation")
 
@@ -584,22 +611,27 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
         # 4. Results Display
         # Resumed rows join the fresh results here: render_results
         # dedupes/sorts the combined list, so the output lists every
-        # host (old and new) exactly once.
+        # host (old and new) exactly once. Fresh final URLs win over
+        # resumed ones: this run's probe is the newer truth.
         results.extend(resumed_applied)
+        final_urls.update(getattr(validator, "final_urls", {}) or {})
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time,
                        exclude_status=exclude_status, exclude_ip=exclude_ip,
-                       titles=titles, resumed_count=len(resumed_applied))
+                       titles=titles, resumed_count=len(resumed_applied),
+                       final_urls=final_urls)
 
     except KeyboardInterrupt:
         # Same merge as the normal path: the output keeps the resumed
         # rows alongside whatever this run validated before the
         # interrupt.
         results.extend(resumed_applied)
+        final_urls.update(getattr(validator, "final_urls", {}) or {})
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time, interrupted=True,
                        exclude_status=exclude_status, exclude_ip=exclude_ip,
-                       titles=titles, resumed_count=len(resumed_applied))
+                       titles=titles, resumed_count=len(resumed_applied),
+                       final_urls=final_urls)
         sys.exit(130)
 
 

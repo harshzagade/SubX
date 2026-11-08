@@ -6,6 +6,17 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Final URL after redirects: when a probe follows a redirect chain
+  to a different host or path, the landing URL is recorded on the
+  validator (`Validator.final_urls`, only when it differs from the
+  probed URL) and shown in the results -- a `Final URL` table column
+  (opt-in, only when at least one probe landed elsewhere), a
+  `final_url` field in JSON, a `Final URL` column in CSV, and a
+  `=> URL` suffix in txt; rows without a redirect carry null/blank.
+  `validate()`'s `(ips, status, alias)` return is unchanged, and
+  `--resume` carries prior `final_url` values through. 7 new tests
+  in `tests/test_final_url.py` and `tests/test_final_url_cli.py`;
+  README updated.
 - `--resume FILE` CLI flag: continue an interrupted or repeated scan
   from a previous `-o` JSON output -- hosts already recorded there
   are not re-validated (skipped in the brute-force phase and dropped

@@ -35,20 +35,22 @@ def test_load_resumed_results_valid(tmp_path):
         "results": [
             {"subdomain": "WWW.Example.COM.", "status": 200,
              "source": "Passive", "ips": "93.184.216.34",
-             "cname": None, "takeover": None, "title": "WWW Home"},
+             "cname": None, "takeover": None, "title": "WWW Home",
+             "final_url": "https://www.example.com/home"},
             {"subdomain": "api.example.com", "status": "No HTTP",
              "source": "Brute", "ips": ["192.0.2.1", "192.0.2.2"],
              "cname": "api.cdn.example.net", "title": None},
         ],
         "stats": {"duration_seconds": 1.0},
     })
-    rows, titles = load_resumed_results(path)
+    rows, titles, final_urls = load_resumed_results(path)
     assert rows == [
         ("www.example.com", "200", "Passive", "93.184.216.34", ""),
         ("api.example.com", "No HTTP", "Brute", "192.0.2.1, 192.0.2.2",
          "api.cdn.example.net"),
     ]
     assert titles == {"www.example.com": "WWW Home"}
+    assert final_urls == {"www.example.com": "https://www.example.com/home"}
 
 
 def test_load_resumed_results_dedupes_spelling_variants(tmp_path):
@@ -60,7 +62,7 @@ def test_load_resumed_results_dedupes_spelling_variants(tmp_path):
              "source": "Brute", "ips": "93.184.216.34", "cname": None},
         ],
     })
-    rows, _ = load_resumed_results(path)
+    rows, _, _ = load_resumed_results(path)
     assert rows == [
         ("www.example.com", "200", "Passive", "93.184.216.34", ""),
     ]
@@ -287,7 +289,8 @@ def test_resume_skips_revalidation_but_keeps_prior_row(
         "results": [
             {"subdomain": "www.example.com", "status": "200",
              "source": "Passive", "ips": "93.184.216.34",
-             "cname": None, "takeover": None, "title": "WWW Home"},
+             "cname": None, "takeover": None, "title": "WWW Home",
+             "final_url": "https://www.example.com/home"},
             # Not a candidate in this scan: ignored, not resurrected.
             {"subdomain": "stale.example.com", "status": "200",
              "source": "Brute", "ips": "192.0.2.99",
@@ -323,6 +326,7 @@ def test_resume_skips_revalidation_but_keeps_prior_row(
     assert www["source"] == "Passive"
     assert www["ips"] == "93.184.216.34"
     assert www["title"] == "WWW Home"
+    assert www["final_url"] == "https://www.example.com/home"
     assert data["stats"]["resumed"] == 1
     assert data["stats"]["validated"] == 4
     assert data["stats"]["candidates_collected"] == 4

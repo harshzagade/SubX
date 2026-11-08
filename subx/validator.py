@@ -142,6 +142,13 @@ class Validator:
         # visible trace instead of silently costing an extra request.
         self.http_probe_retries = 0
         self.dns_retries = dns_retries
+        # Final URL per subdomain after the probe followed redirects,
+        # keyed by subdomain. Only recorded when the landing URL
+        # differs from the probed one, so same-URL responses add no
+        # noise; read by the CLI to show a Final URL column. A plain
+        # dict (not a return-value change) keeps validate()'s
+        # (ips, status, alias) tuple stable for existing callers.
+        self.final_urls = {}
         # Custom resolver: a single IP (v4 or v6) validated up front,
         # so garbage input fails fast instead of breaking mid-scan.
         # ``None`` keeps the system resolver, exactly as before.
@@ -545,6 +552,16 @@ class Validator:
 
                     # Consider it "working" if it returns a success or redirect code
                     if 200 <= response.status_code < 400:
+                        # The probe follows redirects, so the status may
+                        # belong to a different host or path than the
+                        # subdomain probed. Record the landing URL when
+                        # it differs, so the results show where the
+                        # redirect chain actually ended instead of only
+                        # the original name. getattr: test doubles may
+                        # not carry .url.
+                        final_url = getattr(response, "url", "") or ""
+                        if final_url and final_url != url:
+                            self.final_urls[subdomain] = final_url
                         return ips, response.status_code, alias
                 except requests.RequestException:
                     continue

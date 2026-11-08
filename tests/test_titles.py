@@ -363,7 +363,7 @@ def test_csv_output_carries_title_column(tmp_path):
     out_file = _results_with_titles(
         tmp_path, "csv", {"www.example.com": "Example Site"})
     lines = out_file.read_text().splitlines()
-    assert lines[0] == "Subdomain,Status,Source,IP Addresses,CNAME,Takeover,Title"
+    assert lines[0] == "Subdomain,Status,Source,IP Addresses,CNAME,Takeover,Title,Final URL"
     www_line = next(line for line in lines if line.startswith("www.example.com,"))
     assert "Example Site" in www_line
 
