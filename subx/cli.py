@@ -17,7 +17,8 @@ from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
 from .wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
 from .results import (dedupe_results, sort_results, filter_live_results,
-                      is_live_status,
+                      is_live_status, normalize_subdomain,
+                      load_resumed_results,
                       parse_exclude_statuses, filter_excluded_statuses,
                       parse_exclude_ip_networks, filter_excluded_ip_results)
 from .takeover import takeover_hint
@@ -39,7 +40,8 @@ def get_default_wordlist():
 
 def render_results(console, log, results, found_subdomains, validator,
                    output, only_live, quiet, start_time, interrupted=False,
-                   exclude_status=None, exclude_ip=None, titles=None):
+                   exclude_status=None, exclude_ip=None, titles=None,
+                   resumed_count=0):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -52,6 +54,10 @@ def render_results(console, log, results, found_subdomains, validator,
     (``--titles``); rows without one get an empty title. The Title
     column only appears in the table when at least one title was
     recorded, so scans without ``--titles`` keep the old table.
+    ``resumed_count`` is how many rows came from a ``--resume`` file
+    instead of this run's validation; it is reported in the JSON
+    ``stats`` block so pipelines can tell fresh rows from resumed
+    ones.
     """
     duration = time.time() - start_time
     if results:
@@ -190,8 +196,14 @@ def render_results(console, log, results, found_subdomains, validator,
                         ],
                         "stats": {
                             "duration_seconds": round(duration, 2),
-                            "candidates_collected": len(found_subdomains),
+                            # Resumed hosts were removed from
+                            # found_subdomains before validation, so
+                            # they are added back here: the count is
+                            # candidates this scan collected, not just
+                            # the ones it re-validated.
+                            "candidates_collected": len(found_subdomains) + resumed_count,
                             "validated": validated_count,
+                            "resumed": resumed_count,
                             "wildcard_filtered": getattr(validator, "wildcard_filtered", 0),
                             "dns_cache_hits": getattr(validator, "dns_cache_hits", 0),
                         },
@@ -247,6 +259,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='IP address of a custom DNS resolver (e.g. 1.1.1.1) instead of the system resolver.')
 @click.option('--doh', default=None,
               help='DNS-over-HTTPS endpoint URL (e.g. https://dns.cloudflare.com/dns-query) instead of UDP DNS; cannot be combined with --resolver.')
+@click.option('--resume', default=None, type=click.Path(),
+              help='Resume from a previous -o JSON output: skip re-validating hosts already recorded there.')
 @click.option('--output', '-o', help='Path to output file (json, csv, or txt).')
 @click.option('--no-passive', is_flag=True, help='Skip passive enumeration.')
 @click.option('--no-brute', is_flag=True, help='Skip brute-force enumeration.')
@@ -265,7 +279,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -303,6 +317,21 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     if domain != original_domain.lower():
         log.info(f"[bold blue]i[/bold blue] IDN target converted to punycode: [white]{domain}[/white]")
 
+    # --resume loads up front so a bad file fails fast, before any
+    # network work; the skip itself is applied after the candidate
+    # set is collected (brute-force words first, then the validation
+    # phase), and the prior rows are merged back into the results.
+    resumed_rows = []
+    resumed_titles = {}
+    resumed_subs = set()
+    if resume:
+        try:
+            resumed_rows, resumed_titles = load_resumed_results(resume)
+        except (OSError, ValueError) as e:
+            console.print(f"[bold red]Invalid --resume file:[/bold red] {e}")
+            sys.exit(2)
+        resumed_subs = {normalize_subdomain(r[0]) for r in resumed_rows}
+
     if not quiet:
         console.print(LOGO)
         console.print()
@@ -330,6 +359,10 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     # Kept outside the try alongside `results` so an interrupt still
     # renders and saves the titles collected before it.
     titles = {}
+    # Rows carried over from a --resume file. Kept outside the try so
+    # the interrupt path can merge them too (an interrupt before the
+    # resume-apply step leaves this empty, which is a safe no-op).
+    resumed_applied = []
 
     try:
         # 0. Wildcard Detection
@@ -385,6 +418,17 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
             words, dupes = dedupe_case_variants(words)
             if dupes:
                 log.info(f"[dim]Skipped {dupes} case-variant duplicate(s) in wordlist[/dim]")
+
+            if resumed_subs:
+                # Words already validated in the earlier scan need no
+                # brute-force probe either: their rows come back from
+                # the resume file in the validation phase.
+                before = len(words)
+                words = [w for w in words
+                         if normalize_subdomain(f"{w}.{domain}") not in resumed_subs]
+                skipped = before - len(words)
+                if skipped:
+                    log.info(f"[dim]Skipped {skipped} brute-force candidate(s) already recorded in --resume file[/dim]")
 
             if exclude_sub:
                 try:
@@ -470,7 +514,29 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
         
         log.info(f"[bold green]✓[/bold green] Total unique subdomains: [bold white]{len(found_subdomains)}[/bold white]")
 
-        if not found_subdomains:
+        # --resume: hosts already validated in the earlier scan are not
+        # re-probed. They leave the candidate set here and their prior
+        # rows are merged back into the results after the validation
+        # phase, so the output still lists every host. Prior titles
+        # are seeded too, so the Title column keeps working for them.
+        # Resume entries that are not candidates in this scan (a
+        # different wordlist, a passive source that no longer lists
+        # them) are ignored -- only this scan's candidates resume.
+        if resumed_subs:
+            candidates = {normalize_subdomain(s) for s in found_subdomains}
+            resumed_applied = [r for r in resumed_rows
+                               if normalize_subdomain(r[0]) in candidates]
+            for sub in [s for s in found_subdomains
+                        if normalize_subdomain(s) in resumed_subs]:
+                del found_subdomains[sub]
+            for row in resumed_applied:
+                title = resumed_titles.get(normalize_subdomain(row[0]))
+                if title:
+                    titles[normalize_subdomain(row[0])] = title
+            if resumed_applied:
+                log.info(f"[bold blue]i[/bold blue] Resumed {len(resumed_applied)} previously validated subdomain(s) from [white]{resume}[/white]; skipping re-validation")
+
+        if not found_subdomains and not resumed_applied:
             log.warning("[bold yellow]![/bold yellow] No candidates found")
             return
 
@@ -516,16 +582,24 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                         results.append(res)
 
         # 4. Results Display
+        # Resumed rows join the fresh results here: render_results
+        # dedupes/sorts the combined list, so the output lists every
+        # host (old and new) exactly once.
+        results.extend(resumed_applied)
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time,
                        exclude_status=exclude_status, exclude_ip=exclude_ip,
-                       titles=titles)
+                       titles=titles, resumed_count=len(resumed_applied))
 
     except KeyboardInterrupt:
+        # Same merge as the normal path: the output keeps the resumed
+        # rows alongside whatever this run validated before the
+        # interrupt.
+        results.extend(resumed_applied)
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time, interrupted=True,
                        exclude_status=exclude_status, exclude_ip=exclude_ip,
-                       titles=titles)
+                       titles=titles, resumed_count=len(resumed_applied))
         sys.exit(130)
 
 

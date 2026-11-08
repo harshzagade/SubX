@@ -12,6 +12,82 @@ one clean, ordered list.
 """
 
 import ipaddress
+import json
+
+
+def load_resumed_results(path):
+    """Read a previous SubX ``-o`` JSON output file for ``--resume``.
+
+    Returns ``(rows, titles)``: ``rows`` are the prior result rows as
+    (subdomain, status, source, ips, cname) tuples and ``titles`` maps
+    normalized subdomains to their recorded HTML ``<title>`` (only
+    rows that had one). Subdomains are normalized (lowercased,
+    trailing dot stripped) and duplicate spellings collapse to the
+    first row seen, matching how ``dedupe_results`` treats them.
+
+    Raises ``OSError`` when the file cannot be read and ``ValueError``
+    when it is not a SubX JSON output (bad JSON, wrong top-level
+    shape, or a result entry missing a required field), so the CLI
+    can fail fast instead of silently resuming from garbage.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{path} is not valid JSON: {e}") from None
+    if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+        raise ValueError(
+            f"{path} is not a SubX JSON output (expected an object "
+            'with a "results" list)'
+        )
+    rows = []
+    titles = {}
+    seen = set()
+    for entry in data["results"]:
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"{path} has a result entry that is not an object: {entry!r}"
+            )
+        sub = entry.get("subdomain")
+        if not isinstance(sub, str) or not sub.strip():
+            raise ValueError(
+                f"{path} has a result entry without a subdomain: {entry!r}"
+            )
+        status = entry.get("status")
+        if not isinstance(status, (str, int)):
+            raise ValueError(
+                f"{path} has a result entry without a status: {entry!r}"
+            )
+        source = entry.get("source")
+        if not isinstance(source, str) or not source:
+            raise ValueError(
+                f"{path} has a result entry without a source: {entry!r}"
+            )
+        ips = entry.get("ips")
+        if isinstance(ips, list):
+            if not all(isinstance(ip, str) for ip in ips):
+                raise ValueError(
+                    f"{path} has a result entry with non-string IPs: {entry!r}"
+                )
+            ips = ", ".join(ips)
+        elif not isinstance(ips, str):
+            raise ValueError(
+                f"{path} has a result entry without IPs: {entry!r}"
+            )
+        cname = entry.get("cname")
+        if cname is not None and not isinstance(cname, str):
+            raise ValueError(
+                f"{path} has a result entry with a non-string CNAME: {entry!r}"
+            )
+        key = normalize_subdomain(sub)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append((key, str(status), source, ips, cname or ""))
+        title = entry.get("title")
+        if isinstance(title, str) and title:
+            titles[key] = title
+    return rows, titles
 
 
 def normalize_subdomain(sub):

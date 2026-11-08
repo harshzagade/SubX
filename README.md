@@ -22,6 +22,7 @@
   - Multi-threaded validation with configurable thread count (default 10)
   - Short-timeout HTTP/HTTPS checks (HTTPS first, then HTTP)
   - Skip HTTP validation entirely (`--no-http`) for faster pure-DNS scans
+  - `--resume FILE` continues an interrupted or repeated scan from a previous `-o` JSON output: hosts already recorded there are not re-validated, and their prior rows (with titles) are merged into the new output — ideal for picking up long scans where they left off
 - **📊 Flexible Output**
   - Rich terminal table with progress bars and colored status codes
   - Export to JSON, CSV, or plain text for pipelines and further analysis
@@ -272,6 +273,7 @@ enumeration control:
   --exclude-ip IPS     Hide results with a resolved IP in the comma-separated IP/CIDR list (e.g. "203.0.113.0/24")
   --no-wildcard-check  Skip wildcard detection entirely (for targets already known to be non-wildcard)
   --titles             Record the HTML <title> of each live host in a new results column (one extra GET per live row)
+  --resume FILE        Resume from a previous -o JSON output; skip re-validating hosts already recorded there
 
 output & logging:
   -o, --output FILE    Save results to file (.json, .csv, .txt)
@@ -308,6 +310,7 @@ files all show the same clean list.
     "duration_seconds": 12.34,
     "candidates_collected": 42,
     "validated": 18,
+    "resumed": 0,
     "wildcard_filtered": 2,
     "dns_cache_hits": 7
   }
@@ -316,8 +319,9 @@ files all show the same clean list.
 The `stats` block reports scan totals for pipeline consumers:
 wall-clock duration, candidates collected across phases, rows
 validation produced (before `--only-live`/`--exclude-status`
-display filtering), wildcard false positives dropped, and DNS
-results reused from the cache.
+display filtering), rows carried over from a `--resume` file
+instead of re-validated this run, wildcard false positives dropped,
+and DNS results reused from the cache.
 
 ### CSV
 ```csv

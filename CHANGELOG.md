@@ -6,6 +6,17 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--resume FILE` CLI flag: continue an interrupted or repeated scan
+  from a previous `-o` JSON output -- hosts already recorded there
+  are not re-validated (skipped in the brute-force phase and dropped
+  from the validation phase) and their prior rows, with titles, are
+  merged into the new output, so the output still lists every host.
+  Resume entries that are not candidates in this scan are ignored; a
+  missing file, bad JSON, or a file that is not a SubX JSON output
+  fails fast with exit 2. The JSON `stats` block gains a `resumed`
+  count (rows carried over instead of re-validated). New stdlib-only
+  `load_resumed_results()` in `subx/results.py`; 8 new tests in
+  `tests/test_resume.py`; README updated.
 - urlscan.io as a fourth passive source: `Enumerator._urlscan()`
   queries the public search API (no key needed; anonymous use is
   rate-limited) and collects each result's `page.domain`; only the
