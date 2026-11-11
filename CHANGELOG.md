@@ -6,6 +6,15 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--only-source NAME` CLI flag (repeatable): run just the named
+  passive source(s) -- `crtsh`, `hackertarget`, `alienvault`, or
+  `urlscan` (display names like `crt.sh`/`urlscan.io` and the `crt` /
+  `otx` shorthands also work, case-insensitively) -- for debugging one
+  source or when a source is rate-limiting; unknown names fail fast
+  with exit 2. New `Enumerator.SOURCES` table +
+  `normalize_source_name()` in `subx/enumerator.py`; skipped sources
+  are never queried, retried, or counted as failures. 13 new tests
+  in `tests/test_only_source.py`; README updated.
 - Final URL after redirects: when a probe follows a redirect chain
   to a different host or path, the landing URL is recorded on the
   validator (`Validator.final_urls`, only when it differs from the

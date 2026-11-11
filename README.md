@@ -32,6 +32,7 @@
   - Status per subdomain: HTTP status code, `No HTTP` (resolves, no web service), or `N/A` (HTTP checks skipped)
   - IP address resolution and grouping per subdomain
   - `--only-live` shows only subdomains with a working HTTP service, hiding DNS-only rows — ideal for recon pipelines
+  - `--only-source crtsh` runs just one passive source (crtsh, hackertarget, alienvault, or urlscan; repeatable) — for debugging a source or when one is rate-limiting
   - `--exclude-status 403,404` hides results with those HTTP status codes, applied after dedupe — ideal for cutting 403/404 noise from pipelines
   - `--exclude-ip 203.0.113.0/24` hides results whose resolved IPs fall in the given ranges — ideal for cutting CDN-blanketed noise from pipelines
   - `--no-wildcard-check` skips the wildcard-detection probes entirely for targets already known to be non-wildcard
@@ -192,6 +193,8 @@ Four OSINT sources are queried in parallel (each with a configurable timeout, 15
 
 All unique subdomains found are combined.
 
+`--only-source NAME` (repeatable) restricts the phase to just the named source(s) — `crtsh`, `hackertarget`, `alienvault`, or `urlscan` (display names like `crt.sh` and `urlscan.io` work too) — for debugging one source or when a source is rate-limiting; an unknown name fails fast with exit code 2. Without it, all four sources run.
+
 ### 3. Active Brute-Forcing
 Each word from the wordlist is prefixed to the domain (`api.example.com`), resolved via DNS, and checked against the wildcard IP set. Subdomains found this way that were also found passively are tagged as source **Both**; otherwise **Passive** or **Brute**.
 
@@ -265,6 +268,7 @@ scan settings:
 
 enumeration control:
   --no-passive         Disable passive source discovery
+  --only-source NAME   Run only the named passive source(s) (crtsh, hackertarget, alienvault, urlscan; repeatable)
   --no-brute           Disable wordlist brute-forcing
   --exclude-sub GLOB   Skip brute-force candidates matching the glob (repeatable)
   --no-http            Skip HTTP/HTTPS service validation

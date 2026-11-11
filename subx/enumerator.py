@@ -8,7 +8,47 @@ class Enumerator:
     #: (connection error / timeout) before the source is dropped.
     DEFAULT_SOURCE_RETRIES = 1
 
-    def __init__(self, domain, source_timeout=None, source_retries=None):
+    #: Passive sources, keyed by canonical short name. Each value is
+    #: (display name, method name). ``normalize_source_name`` accepts
+    #: either spelling (plus the ``crt``/``otx`` shorthands) so
+    #: ``--only-source`` is forgiving about what the user types.
+    SOURCES = {
+        "crtsh": ("crt.sh", "_crtsh"),
+        "hackertarget": ("HackerTarget", "_hackertarget"),
+        "alienvault": ("AlienVault", "_alienvault"),
+        "urlscan": ("urlscan.io", "_urlscan"),
+    }
+    #: Extra spellings accepted by ``normalize_source_name``.
+    SOURCE_ALIASES = {
+        "crt": "crtsh",
+        "otx": "alienvault",
+    }
+
+    @classmethod
+    def normalize_source_name(cls, name):
+        """Map a user-typed source name to its canonical key.
+
+        Accepts the canonical key (``crtsh``), the display name
+        (``crt.sh``, ``urlscan.io``), and the ``crt``/``otx``
+        shorthands, case-insensitively. Raises ``ValueError`` naming
+        the valid sources for anything else, so a typo fails fast
+        instead of silently querying nothing.
+        """
+        key = str(name).strip().lower()
+        if key in cls.SOURCES:
+            return key
+        if key in cls.SOURCE_ALIASES:
+            return cls.SOURCE_ALIASES[key]
+        for canonical, (display, _method) in cls.SOURCES.items():
+            if key == display.lower():
+                return canonical
+        valid = ", ".join(sorted(cls.SOURCES))
+        raise ValueError(
+            f"unknown passive source {name!r}; valid sources: {valid}"
+        )
+
+    def __init__(self, domain, source_timeout=None, source_retries=None,
+                 only_sources=None):
         self.domain = domain
         if source_timeout is None:
             source_timeout = self.DEFAULT_SOURCE_TIMEOUT
@@ -20,6 +60,16 @@ class Enumerator:
         if not isinstance(source_retries, int) or source_retries < 0:
             raise ValueError("source_retries must be a non-negative integer")
         self.source_retries = source_retries
+        # Restrict the passive phase to the named sources (None = all
+        # four), for debugging or when one source is rate-limiting.
+        # Names are normalized up front so a typo fails fast at
+        # construction instead of silently querying nothing.
+        if only_sources is None:
+            self.only_sources = None
+        else:
+            self.only_sources = frozenset(
+                self.normalize_source_name(s) for s in only_sources
+            )
         self.log = logging.getLogger("subx.enumerator")
         # Sources that ultimately failed, name -> error text. The CLI
         # reports this count in the scan summary so a silently dropped
@@ -31,11 +81,13 @@ class Enumerator:
         subdomains = set()
 
         sources = [
-            ("crt.sh", self._crtsh),
-            ("HackerTarget", self._hackertarget),
-            ("AlienVault", self._alienvault),
-            ("urlscan.io", self._urlscan)
+            (display, getattr(self, method))
+            for key, (display, method) in self.SOURCES.items()
+            if self.only_sources is None or key in self.only_sources
         ]
+        if self.only_sources is not None:
+            enabled = ", ".join(name for name, _ in sources)
+            self.log.debug(f"Only-source filter: querying {enabled} only.")
 
         for name, func in sources:
             self.log.debug(f"Querying [bold cyan]{name}[/bold cyan]...")

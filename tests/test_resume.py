@@ -245,7 +245,7 @@ def _run_main(monkeypatch, tmp_path, resume_path):
             return (["93.184.216.34"], 200, None)
 
     class FakeEnumerator:
-        def __init__(self, domain, source_timeout=None):
+        def __init__(self, domain, source_timeout=None, only_sources=None):
             self.domain = domain
             self.log = None
 

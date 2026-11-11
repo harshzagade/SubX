@@ -282,6 +282,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Resume from a previous -o JSON output: skip re-validating hosts already recorded there.')
 @click.option('--output', '-o', help='Path to output file (json, csv, or txt).')
 @click.option('--no-passive', is_flag=True, help='Skip passive enumeration.')
+@click.option('--only-source', multiple=True,
+              help='Run only the named passive source(s) (crtsh, hackertarget, alienvault, urlscan; repeatable).')
 @click.option('--no-brute', is_flag=True, help='Skip brute-force enumeration.')
 @click.option('--exclude-sub', multiple=True,
               help='Glob pattern to skip brute-force candidates (e.g. "*.blog.*"); repeatable.')
@@ -298,7 +300,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=()):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -358,8 +360,23 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
         console.print(f"[dim]Target:[/dim] [bold white]{domain}[/bold white] [dim]|[/dim] [dim]Threads:[/dim] [white]{threads}[/white] [dim]|[/dim] [dim]HTTP:[/dim] [white]{'enabled' if not no_http else 'disabled'}[/white]\n")
     
     start_time = time.time()
-    
-    enumerator = Enumerator(domain, source_timeout=source_timeout)
+
+    # --only-source names are validated up front so a typo fails fast
+    # with exit 2 before any network work, exactly like the other
+    # parse helpers above. The Enumerator normalizes them again
+    # (idempotent), so the CLI passes the raw names through.
+    if only_source:
+        try:
+            only_sources = [Enumerator.normalize_source_name(s)
+                            for s in only_source]
+        except ValueError as e:
+            console.print(f"[bold red]Invalid --only-source:[/bold red] {e}")
+            sys.exit(2)
+    else:
+        only_sources = None
+
+    enumerator = Enumerator(domain, source_timeout=source_timeout,
+                            only_sources=only_sources)
     # Inject logger into enumerator for verbose feedback
     enumerator.log = log
     
@@ -412,6 +429,10 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
         # 1. Passive Enumeration
         if not no_passive:
             log.info(f"[bold blue]i[/bold blue] Querying passive sources...")
+            if only_sources:
+                names = ", ".join(Enumerator.SOURCES[k][0]
+                                  for k in only_sources)
+                log.info(f"[bold blue]i[/bold blue] Only-source filter: querying {names} only")
             passive_subs = enumerator.passive_enumerate()
             for sub in passive_subs:
                 found_subdomains[sub] = "Passive"
