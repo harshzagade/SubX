@@ -116,7 +116,7 @@ class Validator:
 
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
                  dns_retries=None, resolver_ip=None, http_retries=None,
-                 doh_url=None, delay=None):
+                 doh_url=None, delay=None, follow_redirects=True):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -190,6 +190,12 @@ class Validator:
         if delay < 0:
             raise ValueError("delay must be non-negative")
         self.delay = delay
+        # Whether HTTP probes follow redirects (the default). When
+        # False, the probe reports the first response's status (e.g.
+        # a 301) instead of the landing page's 200, and no final URL
+        # is recorded -- the response URL is the probed URL, so the
+        # ``final_urls`` guard in ``validate`` never fires.
+        self.follow_redirects = bool(follow_redirects)
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -433,6 +439,10 @@ class Validator:
     def _probe_http(self, url):
         """GET ``url``, retrying transient failures once.
 
+        Redirects are followed unless the validator was built with
+        ``follow_redirects=False`` (``--no-follow-redirects``), in
+        which case the first response is returned as-is.
+
         Only connection errors and timeouts are retried -- a refused
         connection or a stalled response is often a flaky network, not
         a dead host. Every other ``requests`` failure (TLS errors,
@@ -457,7 +467,8 @@ class Validator:
         for attempt in range(self.http_retries + 1):
             try:
                 return requests.get(url, timeout=self.http_timeout,
-                                    allow_redirects=True, verify=False)
+                                    allow_redirects=self.follow_redirects,
+                                    verify=False)
             except requests.RequestException as e:
                 if not transient or not isinstance(e, transient):
                     raise
@@ -518,7 +529,11 @@ class Validator:
 
         The HTTP probe always targets the original ``subdomain`` (so
         the Host header and TLS SNI stay correct), not the CNAME
-        target.
+        target. By default the probe follows redirects and reports the
+        landing page's status; with ``follow_redirects=False`` it
+        reports the first response's status instead (a 301 stays a
+        301), so pipelines see the raw redirect rather than the
+        landing page's 200.
         """
         subdomain = to_ascii_domain(subdomain)
         if self.delay:

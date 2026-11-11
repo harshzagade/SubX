@@ -296,11 +296,13 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Comma-separated IPs/CIDR ranges to hide from results (e.g. "203.0.113.0/24"); applied after dedupe.')
 @click.option('--no-wildcard-check', is_flag=True,
               help='Skip wildcard detection entirely (for targets already known to be non-wildcard).')
+@click.option('--no-follow-redirects', is_flag=True,
+              help='Report the first response status instead of following redirects (a 301 stays a 301).')
 @click.option('--titles', 'fetch_titles', is_flag=True,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=()):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -384,10 +386,14 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
         validator = Validator(dns_timeout=timeout, http_timeout=http_timeout,
                               dns_retries=dns_retries, resolver_ip=resolver,
                               http_retries=http_retries, doh_url=doh,
-                              delay=delay)
+                              delay=delay,
+                              follow_redirects=not no_follow_redirects)
     except ValueError as e:
         console.print(f"[bold red]Invalid option:[/bold red] {e}")
         sys.exit(2)
+    if no_follow_redirects:
+        log.info("[bold blue]i[/bold blue] Redirect following disabled (--no-follow-redirects): "
+                 "probes report the first response status")
     found_subdomains = {}  # subdomain -> source
     # Validated rows, kept outside the try so a KeyboardInterrupt
     # still renders and saves what was found before the interrupt.

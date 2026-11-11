@@ -38,6 +38,7 @@
   - `--no-wildcard-check` skips the wildcard-detection probes entirely for targets already known to be non-wildcard
   - `--titles` records each live host's HTML `<title>` in a new results column (one extra GET per live row, blank on any failure) — handy for telling lookalike subdomains apart at a glance
   - Redirects are followed and the final URL is recorded: when a probe's redirect chain lands on a different host or path than the subdomain probed, the results gain a `Final URL` column (and a `final_url` field in JSON, `Final URL` column in CSV, `=> URL` suffix in txt) so redirect chains stay visible instead of only the original name
+  - `--no-follow-redirects` reports the first response's status instead of following the redirect chain — a 301 stays a 301 — so pipelines see the raw redirect rather than the landing page's 200
   - `--doh URL` sends DNS queries to a DNS-over-HTTPS endpoint (e.g. Cloudflare's `https://dns.cloudflare.com/dns-query`) instead of UDP port 53 — for networks where port 53 is filtered
 
 ---
@@ -207,7 +208,7 @@ Words already discovered by passive sources are skipped in the brute-force phase
 For rate-limited targets, `--delay SECONDS` pauses each worker thread between candidates (mirrors DurbX's `--delay`): with N threads the aggregate rate is roughly N/delay probes per second. The pause happens before each candidate's probe round, even for names that turn out to be misses, so the rate stays steady instead of bunching up on the live names.
 
 ### 4. Validation
-Each candidate is resolved to its A records and its AAAA (IPv6) records and then probed: HTTPS first, then HTTP, with a 3-second timeout (configurable via `--http-timeout`). Each protocol's probe is retried once on a transient connection error or timeout (configurable via `--http-retries`, default 1, 0 disables) so a flaky network does not mark a live host `No HTTP`; non-transient probe failures fall through to the next protocol immediately, and retries are counted in the scan summary. A host with only AAAA records is a hit, not a miss, and the IP column shows A addresses followed by AAAA addresses; the wildcard filter drops a candidate only when *all* of its IPs (v4 and v6) are wildcard IPs, so a mixed unique-v4/wildcard-v6 host is kept. A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned.
+Each candidate is resolved to its A records and its AAAA (IPv6) records and then probed: HTTPS first, then HTTP, with a 3-second timeout (configurable via `--http-timeout`). Each protocol's probe is retried once on a transient connection error or timeout (configurable via `--http-retries`, default 1, 0 disables) so a flaky network does not mark a live host `No HTTP`; non-transient probe failures fall through to the next protocol immediately, and retries are counted in the scan summary. A host with only AAAA records is a hit, not a miss, and the IP column shows A addresses followed by AAAA addresses; the wildcard filter drops a candidate only when *all* of its IPs (v4 and v6) are wildcard IPs, so a mixed unique-v4/wildcard-v6 host is kept. A 2xx/3xx response records the status code; a subdomain that resolves but has no web service shows `No HTTP`; with `--no-http` the status shows `N/A` and DNS-only results are returned. By default the probe follows redirects and reports the landing page's status; `--no-follow-redirects` reports the first response's status instead (a 301 stays a 301, and no final URL is recorded), so pipelines see the raw redirect rather than the landing page's 200.
 
 **CNAME aliases are followed, not dropped.** If a candidate is only a CNAME record (e.g. pointing at a CDN or a cloud load balancer), SubX follows the chain — up to 5 hops, loops cut at the first repeated name — and resolves the final target's A records, so the alias is no longer reported as a miss. The first CNAME target is reported in the results table's `CNAME` column (and in JSON/CSV/text output), while the HTTP probe still targets the original subdomain so the Host header and TLS SNI stay correct.
 
@@ -277,6 +278,8 @@ enumeration control:
                        Hide results whose HTTP status is in the comma-separated list (e.g. "403,404")
   --exclude-ip IPS     Hide results with a resolved IP in the comma-separated IP/CIDR list (e.g. "203.0.113.0/24")
   --no-wildcard-check  Skip wildcard detection entirely (for targets already known to be non-wildcard)
+  --no-follow-redirects
+                       Report the first response status instead of following redirects (a 301 stays a 301)
   --titles             Record the HTML <title> of each live host in a new results column (one extra GET per live row)
   --resume FILE        Resume from a previous -o JSON output; skip re-validating hosts already recorded there
 

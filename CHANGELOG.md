@@ -6,6 +6,14 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--no-follow-redirects` CLI flag: the HTTP probe reports the first
+  response's status instead of following the redirect chain, so a 301
+  stays a 301 and no final URL is recorded -- for pipelines that need
+  the raw redirect rather than the landing page's 200. New
+  `Validator(follow_redirects=...)` threaded through `_probe_http`
+  (so `--titles` fetches inherit it too); default behaviour
+  unchanged. 5 new tests in `tests/test_no_follow_redirects.py`;
+  README updated.
 - `--only-source NAME` CLI flag (repeatable): run just the named
   passive source(s) -- `crtsh`, `hackertarget`, `alienvault`, or
   `urlscan` (display names like `crt.sh`/`urlscan.io` and the `crt` /
