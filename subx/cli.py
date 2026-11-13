@@ -305,11 +305,13 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Skip wildcard detection entirely (for targets already known to be non-wildcard).')
 @click.option('--no-follow-redirects', is_flag=True,
               help='Report the first response status instead of following redirects (a 301 stays a 301).')
+@click.option('--user-agent', default=None,
+              help='Custom User-Agent header for HTTP probes and title fetches (e.g. a browser agent) instead of the python-requests default.')
 @click.option('--titles', 'fetch_titles', is_flag=True,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -396,7 +398,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                               dns_retries=dns_retries, resolver_ip=resolver,
                               http_retries=http_retries, doh_url=doh,
                               delay=delay,
-                              follow_redirects=not no_follow_redirects)
+                              follow_redirects=not no_follow_redirects,
+                              user_agent=user_agent)
     except ValueError as e:
         console.print(f"[bold red]Invalid option:[/bold red] {e}")
         sys.exit(2)

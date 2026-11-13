@@ -116,7 +116,8 @@ class Validator:
 
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
                  dns_retries=None, resolver_ip=None, http_retries=None,
-                 doh_url=None, delay=None, follow_redirects=True):
+                 doh_url=None, delay=None, follow_redirects=True,
+                 user_agent=None):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -202,6 +203,17 @@ class Validator:
         # is recorded -- the response URL is the probed URL, so the
         # ``final_urls`` guard in ``validate`` never fires.
         self.follow_redirects = bool(follow_redirects)
+        # Custom User-Agent sent on HTTP probes and title fetches.
+        # ``None`` keeps the requests default; some WAFs block the
+        # default python-requests agent outright, so a browser-style
+        # agent can be supplied instead. A blank string fails fast
+        # here rather than sending an empty header mid-scan.
+        self.user_agent = None
+        if user_agent is not None:
+            user_agent = str(user_agent).strip()
+            if not user_agent:
+                raise ValueError("user_agent must not be empty")
+            self.user_agent = user_agent
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -470,11 +482,18 @@ class Validator:
             )
             if isinstance(exc, type)
         )
+        # A custom User-Agent rides on every probe (and on title
+        # fetches, which reuse this method); with none configured the
+        # headers kwarg is omitted entirely so requests keeps its
+        # default agent instead of receiving an empty one.
+        kwargs = {}
+        if self.user_agent is not None:
+            kwargs["headers"] = {"User-Agent": self.user_agent}
         for attempt in range(self.http_retries + 1):
             try:
                 return requests.get(url, timeout=self.http_timeout,
                                     allow_redirects=self.follow_redirects,
-                                    verify=False)
+                                    verify=False, **kwargs)
             except requests.RequestException as e:
                 if not transient or not isinstance(e, transient):
                     raise

@@ -6,6 +6,14 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--user-agent STRING` CLI flag: send a custom User-Agent header on
+  HTTP probes and title fetches instead of the python-requests
+  default, which some WAFs block outright. New
+  `Validator(user_agent=...)` threaded through `_probe_http` (so
+  `--titles` fetches inherit it too); with none configured no
+  `headers` kwarg is sent at all, so requests keeps its default
+  agent, and a blank value fails fast. 6 new tests in
+  `tests/test_user_agent.py`; README updated.
 - Redirect hop count: every probe that gets a response records how
   many redirects it followed (`len(response.history)`, 0 for a direct
   response) on the validator (`Validator.redirect_counts`) and
