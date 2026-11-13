@@ -149,6 +149,12 @@ class Validator:
         # dict (not a return-value change) keeps validate()'s
         # (ips, status, alias) tuple stable for existing callers.
         self.final_urls = {}
+        # Redirect hop count per subdomain, keyed by subdomain.
+        # Recorded for every probe that got a response -- including 0
+        # for a direct response -- so long chains and redirect loops
+        # are visible in the JSON output. Like final_urls, a plain
+        # dict keeps validate()'s return tuple stable.
+        self.redirect_counts = {}
         # Custom resolver: a single IP (v4 or v6) validated up front,
         # so garbage input fails fast instead of breaking mid-scan.
         # ``None`` keeps the system resolver, exactly as before.
@@ -577,6 +583,16 @@ class Validator:
                         final_url = getattr(response, "url", "") or ""
                         if final_url and final_url != url:
                             self.final_urls[subdomain] = final_url
+                        # Redirect hop count: response.history holds
+                        # one entry per redirect followed, so its
+                        # length is the chain length -- 0 for a direct
+                        # response, 2 for a two-hop chain. Recorded
+                        # for every probe that got a response, so long
+                        # chains and redirect loops are visible in the
+                        # JSON output. getattr: test doubles may not
+                        # carry .history.
+                        history = getattr(response, "history", None) or []
+                        self.redirect_counts[subdomain] = len(history)
                         return ips, response.status_code, alias
                 except requests.RequestException:
                     continue

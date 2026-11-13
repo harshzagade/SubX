@@ -6,6 +6,14 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Redirect hop count: every probe that gets a response records how
+  many redirects it followed (`len(response.history)`, 0 for a direct
+  response) on the validator (`Validator.redirect_counts`) and
+  surfaces it as a `redirects` field in the JSON output (null for
+  DNS-only rows), so long chains and redirect loops are visible to
+  pipelines; `validate()`'s `(ips, status, alias)` return is
+  unchanged, and `--resume` carries prior hop counts through. 7 new
+  tests in `tests/test_redirect_counts.py`; README updated.
 - `--no-follow-redirects` CLI flag: the HTTP probe reports the first
   response's status instead of following the redirect chain, so a 301
   stays a 301 and no final URL is recorded -- for pipelines that need

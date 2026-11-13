@@ -37,7 +37,7 @@
   - `--exclude-ip 203.0.113.0/24` hides results whose resolved IPs fall in the given ranges — ideal for cutting CDN-blanketed noise from pipelines
   - `--no-wildcard-check` skips the wildcard-detection probes entirely for targets already known to be non-wildcard
   - `--titles` records each live host's HTML `<title>` in a new results column (one extra GET per live row, blank on any failure) — handy for telling lookalike subdomains apart at a glance
-  - Redirects are followed and the final URL is recorded: when a probe's redirect chain lands on a different host or path than the subdomain probed, the results gain a `Final URL` column (and a `final_url` field in JSON, `Final URL` column in CSV, `=> URL` suffix in txt) so redirect chains stay visible instead of only the original name
+  - Redirects are followed and the final URL is recorded: when a probe's redirect chain lands on a different host or path than the subdomain probed, the results gain a `Final URL` column (and a `final_url` field in JSON, `Final URL` column in CSV, `=> URL` suffix in txt) so redirect chains stay visible instead of only the original name. The hop count is recorded too, as a `redirects` field in the JSON output (0 for a direct response, null for DNS-only rows), so long chains and redirect loops stand out without re-fetching; `--resume` carries prior hop counts through
   - `--no-follow-redirects` reports the first response's status instead of following the redirect chain — a 301 stays a 301 — so pipelines see the raw redirect rather than the landing page's 200
   - `--doh URL` sends DNS queries to a DNS-over-HTTPS endpoint (e.g. Cloudflare's `https://dns.cloudflare.com/dns-query`) instead of UDP port 53 — for networks where port 53 is filtered
 
@@ -312,7 +312,8 @@ files all show the same clean list.
       "cname": null,
       "takeover": null,
       "title": "Example Site",
-      "final_url": null
+      "final_url": null,
+      "redirects": 0
     }
   ],
   "stats": {

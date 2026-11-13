@@ -43,7 +43,7 @@ def test_load_resumed_results_valid(tmp_path):
         ],
         "stats": {"duration_seconds": 1.0},
     })
-    rows, titles, final_urls = load_resumed_results(path)
+    rows, titles, final_urls, redirect_counts = load_resumed_results(path)
     assert rows == [
         ("www.example.com", "200", "Passive", "93.184.216.34", ""),
         ("api.example.com", "No HTTP", "Brute", "192.0.2.1, 192.0.2.2",
@@ -51,6 +51,7 @@ def test_load_resumed_results_valid(tmp_path):
     ]
     assert titles == {"www.example.com": "WWW Home"}
     assert final_urls == {"www.example.com": "https://www.example.com/home"}
+    assert redirect_counts == {}
 
 
 def test_load_resumed_results_dedupes_spelling_variants(tmp_path):
@@ -62,7 +63,7 @@ def test_load_resumed_results_dedupes_spelling_variants(tmp_path):
              "source": "Brute", "ips": "93.184.216.34", "cname": None},
         ],
     })
-    rows, _, _ = load_resumed_results(path)
+    rows, _, _, _ = load_resumed_results(path)
     assert rows == [
         ("www.example.com", "200", "Passive", "93.184.216.34", ""),
     ]
