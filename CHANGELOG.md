@@ -6,6 +6,14 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--head-only` CLI flag: HTTP probes use HEAD instead of GET (no
+  body downloaded) when only the status code matters, for lighter
+  scans; redirect following, the transient retry, the custom
+  User-Agent, and the recorded final URL / hop count behave the
+  same either way. New `Validator(head_only=...)` threaded through
+  `_probe_http`; `--head-only` + `--titles` fails fast with exit 2,
+  since a HEAD response carries no body to read a title from. 7 new
+  tests in `tests/test_head_only.py`; README updated.
 - `--user-agent STRING` CLI flag: send a custom User-Agent header on
   HTTP probes and title fetches instead of the python-requests
   default, which some WAFs block outright. New

@@ -117,7 +117,7 @@ class Validator:
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
                  dns_retries=None, resolver_ip=None, http_retries=None,
                  doh_url=None, delay=None, follow_redirects=True,
-                 user_agent=None):
+                 user_agent=None, head_only=False):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -214,6 +214,12 @@ class Validator:
             if not user_agent:
                 raise ValueError("user_agent must not be empty")
             self.user_agent = user_agent
+        # Whether HTTP probes use HEAD instead of GET (``--head-only``).
+        # HEAD is lighter -- no body is downloaded -- and is enough
+        # when only the status code matters. A HEAD response carries
+        # no body, so ``fetch_title`` always returns "" with this on;
+        # the CLI rejects the ``--head-only`` + ``--titles`` combo.
+        self.head_only = bool(head_only)
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -455,11 +461,17 @@ class Validator:
         return result
 
     def _probe_http(self, url):
-        """GET ``url``, retrying transient failures once.
+        """GET ``url`` (or HEAD with ``head_only``), retrying transient failures once.
 
         Redirects are followed unless the validator was built with
         ``follow_redirects=False`` (``--no-follow-redirects``), in
-        which case the first response is returned as-is.
+        which case the first response is returned as-is. With
+        ``head_only`` (``--head-only``) the probe is a HEAD request
+        instead of a GET: no body is downloaded, which is lighter
+        when only the status code matters. Redirect following, the
+        transient retry, the custom User-Agent, and the recorded
+        final URL / hop count all behave the same either way; only
+        the method and the (absent) body differ.
 
         Only connection errors and timeouts are retried -- a refused
         connection or a stalled response is often a flaky network, not
@@ -489,11 +501,17 @@ class Validator:
         kwargs = {}
         if self.user_agent is not None:
             kwargs["headers"] = {"User-Agent": self.user_agent}
+        # HEAD when head_only: the method is resolved at call time
+        # from the requests module so test doubles that define their
+        # own head/get are honored, like the transient classes below.
+        method = getattr(requests, "head", None) if self.head_only else None
+        if method is None:
+            method = requests.get
         for attempt in range(self.http_retries + 1):
             try:
-                return requests.get(url, timeout=self.http_timeout,
-                                    allow_redirects=self.follow_redirects,
-                                    verify=False, **kwargs)
+                return method(url, timeout=self.http_timeout,
+                              allow_redirects=self.follow_redirects,
+                              verify=False, **kwargs)
             except requests.RequestException as e:
                 if not transient or not isinstance(e, transient):
                     raise
@@ -510,7 +528,10 @@ class Validator:
         HTTP service, a non-2xx/3xx status, a missing ``<title>``)
         leaves the title blank instead of failing the scan. Only the
         first 64 KiB of the body is scanned, since ``<title>`` lives
-        in ``<head>``.
+        in ``<head>``. With ``head_only`` the probe is a HEAD request
+        and carries no body, so this always returns "" -- the CLI
+        rejects the ``--head-only`` + ``--titles`` combo instead of
+        silently fetching nothing.
         """
         subdomain = to_ascii_domain(subdomain)
         for protocol in ("https", "http"):
