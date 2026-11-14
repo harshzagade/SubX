@@ -6,6 +6,14 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- Response-body hash: every probe that gets a 2xx/3xx response
+  records a short SHA-256 prefix of the response body (first 12 hex
+  chars) on the validator (`Validator.body_hashes`) and surfaces it
+  as a `body_hash` field in the JSON output (null for DNS-only rows
+  and for `--head-only` probes, which carry no body), so identical
+  pages across subdomains (default pages, parking pages) can be
+  grouped without re-fetching; `--resume` carries prior hashes
+  through. 8 new tests in `tests/test_body_hash.py`; README updated.
 - `--head-only` CLI flag: HTTP probes use HEAD instead of GET (no
   body downloaded) when only the status code matters, for lighter
   scans; redirect following, the transient retry, the custom

@@ -40,6 +40,7 @@
   - Redirects are followed and the final URL is recorded: when a probe's redirect chain lands on a different host or path than the subdomain probed, the results gain a `Final URL` column (and a `final_url` field in JSON, `Final URL` column in CSV, `=> URL` suffix in txt) so redirect chains stay visible instead of only the original name. The hop count is recorded too, as a `redirects` field in the JSON output (0 for a direct response, null for DNS-only rows), so long chains and redirect loops stand out without re-fetching; `--resume` carries prior hop counts through
   - `--no-follow-redirects` reports the first response's status instead of following the redirect chain — a 301 stays a 301 — so pipelines see the raw redirect rather than the landing page's 200
   - `--user-agent STRING` sends a custom User-Agent header on HTTP probes and title fetches instead of the python-requests default, which some WAFs block outright
+  - The probe response body is hashed too: a `body_hash` field in the JSON output carries the first 12 hex chars of the SHA-256 of the body (null for DNS-only rows and for `--head-only` probes, which carry no body), so identical pages across subdomains — default pages, parking pages — can be grouped without re-fetching; `--resume` carries prior hashes through
   - `--doh URL` sends DNS queries to a DNS-over-HTTPS endpoint (e.g. Cloudflare's `https://dns.cloudflare.com/dns-query`) instead of UDP port 53 — for networks where port 53 is filtered
 
 ---
@@ -316,7 +317,8 @@ files all show the same clean list.
       "takeover": null,
       "title": "Example Site",
       "final_url": null,
-      "redirects": 0
+      "redirects": 0,
+      "body_hash": "9f86d081884c"
     }
   ],
   "stats": {

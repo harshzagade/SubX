@@ -208,7 +208,7 @@ def test_resume_carries_redirect_counts(tmp_path):
              "redirects": "three"},
         ],
     }))
-    rows, _, _, redirect_counts = load_resumed_results(str(path))
+    rows, _, _, redirect_counts, body_hashes = load_resumed_results(str(path))
     assert len(rows) == 3
     assert redirect_counts == {
         "www.example.com": 2,

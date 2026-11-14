@@ -18,17 +18,19 @@ import json
 def load_resumed_results(path):
     """Read a previous SubX ``-o`` JSON output file for ``--resume``.
 
-    Returns ``(rows, titles, final_urls, redirect_counts)``: ``rows``
-    are the prior result rows as (subdomain, status, source, ips,
-    cname) tuples, ``titles`` maps normalized subdomains to their
-    recorded HTML ``<title>`` (only rows that had one), ``final_urls``
-    maps normalized subdomains to the URL the probe landed on after
-    following redirects (only rows that had one), and
-    ``redirect_counts`` maps normalized subdomains to the redirect hop
-    count recorded for the probe (only rows that had one). Subdomains
-    are normalized (lowercased, trailing dot stripped) and duplicate
-    spellings collapse to the first row seen, matching how
-    ``dedupe_results`` treats them.
+    Returns ``(rows, titles, final_urls, redirect_counts,
+    body_hashes)``: ``rows`` are the prior result rows as (subdomain,
+    status, source, ips, cname) tuples, ``titles`` maps normalized
+    subdomains to their recorded HTML ``<title>`` (only rows that had
+    one), ``final_urls`` maps normalized subdomains to the URL the
+    probe landed on after following redirects (only rows that had
+    one), ``redirect_counts`` maps normalized subdomains to the
+    redirect hop count recorded for the probe (only rows that had
+    one), and ``body_hashes`` maps normalized subdomains to the short
+    SHA-256 prefix of the probe response body (only rows that had
+    one). Subdomains are normalized (lowercased, trailing dot
+    stripped) and duplicate spellings collapse to the first row seen,
+    matching how ``dedupe_results`` treats them.
 
     Raises ``OSError`` when the file cannot be read and ``ValueError``
     when it is not a SubX JSON output (bad JSON, wrong top-level
@@ -49,6 +51,7 @@ def load_resumed_results(path):
     titles = {}
     final_urls = {}
     redirect_counts = {}
+    body_hashes = {}
     seen = set()
     for entry in data["results"]:
         if not isinstance(entry, dict):
@@ -104,7 +107,10 @@ def load_resumed_results(path):
         if (isinstance(redirects, int) and not isinstance(redirects, bool)
                 and redirects >= 0):
             redirect_counts[key] = redirects
-    return rows, titles, final_urls, redirect_counts
+        body_hash = entry.get("body_hash")
+        if isinstance(body_hash, str) and body_hash:
+            body_hashes[key] = body_hash
+    return rows, titles, final_urls, redirect_counts, body_hashes
 
 
 def normalize_subdomain(sub):

@@ -41,7 +41,8 @@ def get_default_wordlist():
 def render_results(console, log, results, found_subdomains, validator,
                    output, only_live, quiet, start_time, interrupted=False,
                    exclude_status=None, exclude_ip=None, titles=None,
-                   resumed_count=0, final_urls=None, redirect_counts=None):
+                   resumed_count=0, final_urls=None, redirect_counts=None,
+                   body_hashes=None):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -64,6 +65,11 @@ def render_results(console, log, results, found_subdomains, validator,
     number of redirects the probe followed (0 for a direct response);
     it appears as the ``redirects`` field in the JSON output only,
     so pipelines can spot long chains and redirect loops.
+    ``body_hashes`` maps subdomains to the short SHA-256 prefix of
+    the probe response body; it appears as the ``body_hash`` field in
+    the JSON output only (null for DNS-only rows and for HEAD probes,
+    which carry no body), so identical pages across subdomains can be
+    grouped without re-fetching.
     """
     duration = time.time() - start_time
     if results:
@@ -123,6 +129,10 @@ def render_results(console, log, results, found_subdomains, validator,
         # Redirect hop counts were recorded alongside the final URLs;
         # rows with no probe response (DNS-only) carry None in JSON.
         redirect_counts = redirect_counts or {}
+        # Body hashes were recorded alongside the redirect counts;
+        # rows with no probe response (DNS-only) or probed with HEAD
+        # carry None in JSON.
+        body_hashes = body_hashes or {}
 
         if quiet:
             for sub, status, source, ips, alias in results:
@@ -215,7 +225,8 @@ def render_results(console, log, results, found_subdomains, validator,
                              "takeover": hint,
                              "title": titles.get(r[0]) or None,
                              "final_url": final_urls.get(r[0]) or None,
-                             "redirects": redirect_counts.get(r[0])}
+                             "redirects": redirect_counts.get(r[0]),
+                             "body_hash": body_hashes.get(r[0])}
                             for r, hint in zip(results, hints)
                         ],
                         "stats": {
@@ -363,11 +374,13 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     resumed_titles = {}
     resumed_final_urls = {}
     resumed_redirect_counts = {}
+    resumed_body_hashes = {}
     resumed_subs = set()
     if resume:
         try:
             (resumed_rows, resumed_titles, resumed_final_urls,
-             resumed_redirect_counts) = load_resumed_results(resume)
+             resumed_redirect_counts,
+             resumed_body_hashes) = load_resumed_results(resume)
         except (OSError, ValueError) as e:
             console.print(f"[bold red]Invalid --resume file:[/bold red] {e}")
             sys.exit(2)
@@ -436,6 +449,10 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     # fresh-wins merge as final_urls, so a resumed row keeps its
     # recorded hop count in the JSON output.
     redirect_counts = {}
+    # Body hashes, keyed by subdomain: same seeding and fresh-wins
+    # merge as redirect_counts, so a resumed row keeps its recorded
+    # body hash in the JSON output.
+    body_hashes = {}
 
     try:
         # 0. Wildcard Detection
@@ -617,6 +634,10 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                     normalize_subdomain(row[0]))
                 if redirects is not None:
                     redirect_counts[normalize_subdomain(row[0])] = redirects
+                body_hash = resumed_body_hashes.get(
+                    normalize_subdomain(row[0]))
+                if body_hash:
+                    body_hashes[normalize_subdomain(row[0])] = body_hash
             if resumed_applied:
                 log.info(f"[bold blue]i[/bold blue] Resumed {len(resumed_applied)} previously validated subdomain(s) from [white]{resume}[/white]; skipping re-validation")
 
@@ -674,12 +695,15 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
         final_urls.update(getattr(validator, "final_urls", {}) or {})
         redirect_counts.update(
             getattr(validator, "redirect_counts", {}) or {})
+        body_hashes.update(
+            getattr(validator, "body_hashes", {}) or {})
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time,
                        exclude_status=exclude_status, exclude_ip=exclude_ip,
                        titles=titles, resumed_count=len(resumed_applied),
                        final_urls=final_urls,
-                       redirect_counts=redirect_counts)
+                       redirect_counts=redirect_counts,
+                       body_hashes=body_hashes)
 
     except KeyboardInterrupt:
         # Same merge as the normal path: the output keeps the resumed
@@ -689,12 +713,15 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
         final_urls.update(getattr(validator, "final_urls", {}) or {})
         redirect_counts.update(
             getattr(validator, "redirect_counts", {}) or {})
+        body_hashes.update(
+            getattr(validator, "body_hashes", {}) or {})
         render_results(console, log, results, found_subdomains, validator,
                        output, only_live, quiet, start_time, interrupted=True,
                        exclude_status=exclude_status, exclude_ip=exclude_ip,
                        titles=titles, resumed_count=len(resumed_applied),
                        final_urls=final_urls,
-                       redirect_counts=redirect_counts)
+                       redirect_counts=redirect_counts,
+                       body_hashes=body_hashes)
         sys.exit(130)
 
 

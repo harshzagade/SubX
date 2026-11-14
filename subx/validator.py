@@ -1,4 +1,5 @@
 import dns.resolver
+import hashlib
 import html
 import ipaddress
 import requests
@@ -156,6 +157,13 @@ class Validator:
         # are visible in the JSON output. Like final_urls, a plain
         # dict keeps validate()'s return tuple stable.
         self.redirect_counts = {}
+        # Short SHA-256 prefix of the probe response body, keyed by
+        # subdomain. Recorded for every probe that got a 2xx/3xx
+        # response, so identical pages across subdomains (default
+        # pages, parking pages) can be grouped without re-fetching.
+        # Like final_urls, a plain dict keeps validate()'s return
+        # tuple stable.
+        self.body_hashes = {}
         # Custom resolver: a single IP (v4 or v6) validated up front,
         # so garbage input fails fast instead of breaking mid-scan.
         # ``None`` keeps the system resolver, exactly as before.
@@ -633,6 +641,22 @@ class Validator:
                         # carry .history.
                         history = getattr(response, "history", None) or []
                         self.redirect_counts[subdomain] = len(history)
+                        # Body hash: SHA-256 of the probe response
+                        # body, first 12 hex chars -- enough to group
+                        # identical pages (default pages, parking
+                        # pages) without re-fetching. Only recorded
+                        # for GET probes: a HEAD response has no body,
+                        # so hashing it would just fingerprint the
+                        # empty string and falsely group every HEAD
+                        # row together. getattr: test doubles may not
+                        # carry .content.
+                        if not self.head_only:
+                            body = getattr(response, "content", None)
+                            if body is not None:
+                                self.body_hashes[subdomain] = (
+                                    hashlib.sha256(body)
+                                    .hexdigest()[:12]
+                                )
                         return ips, response.status_code, alias
                 except requests.RequestException:
                     continue
