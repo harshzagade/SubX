@@ -21,7 +21,8 @@ from .results import (dedupe_results, sort_results, filter_live_results,
                       load_resumed_results,
                       parse_exclude_statuses, filter_excluded_statuses,
                       parse_exclude_ip_networks, filter_excluded_ip_results,
-                      parse_wildcard_ips)
+                      parse_wildcard_ips,
+                      filter_excluded_cname_results)
 from .takeover import takeover_hint
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
@@ -43,7 +44,7 @@ def render_results(console, log, results, found_subdomains, validator,
                    output, only_live, quiet, start_time, interrupted=False,
                    exclude_status=None, exclude_ip=None, titles=None,
                    resumed_count=0, final_urls=None, redirect_counts=None,
-                   body_hashes=None):
+                   body_hashes=None, exclude_cname=None):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -70,7 +71,10 @@ def render_results(console, log, results, found_subdomains, validator,
     the probe response body; it appears as the ``body_hash`` field in
     the JSON output only (null for DNS-only rows and for HEAD probes,
     which carry no body), so identical pages across subdomains can be
-    grouped without re-fetching.
+    grouped without re-fetching. ``exclude_cname`` is the compiled
+    ``--exclude-cname`` glob list; rows whose CNAME alias matches are
+    dropped after dedupe (like ``--exclude-status``/``--exclude-ip``),
+    with the hidden count logged.
     """
     duration = time.time() - start_time
     if results:
@@ -111,6 +115,14 @@ def render_results(console, log, results, found_subdomains, validator,
             hidden = ip_total - len(results)
             if hidden:
                 log.info(f"[dim]--exclude-ip: hid {hidden} row(s) with an IP in an excluded range; "
+                         f"showing {len(results)}.[/dim]")
+
+        if exclude_cname:
+            cname_total = len(results)
+            results = filter_excluded_cname_results(results, exclude_cname)
+            hidden = cname_total - len(results)
+            if hidden:
+                log.info(f"[dim]--exclude-cname: hid {hidden} row(s) with an excluded CNAME alias; "
                          f"showing {len(results)}.[/dim]")
 
         # Takeover hints are derived from the CNAME alias each row
@@ -313,6 +325,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Comma-separated HTTP status codes to hide from results (e.g. "403,404"); applied after dedupe.')
 @click.option('--exclude-ip', default=None,
               help='Comma-separated IPs/CIDR ranges to hide from results (e.g. "203.0.113.0/24"); applied after dedupe.')
+@click.option('--exclude-cname', multiple=True,
+              help='Glob pattern to hide results whose CNAME alias matches it (e.g. "*.cloudfront.net"); repeatable, applied after dedupe.')
 @click.option('--no-wildcard-check', is_flag=True,
               help='Skip wildcard detection entirely (for targets already known to be non-wildcard).')
 @click.option('--wildcard-ips', default=None,
@@ -327,7 +341,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False, wildcard_ips=None):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False, wildcard_ips=None, exclude_cname=()):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -371,6 +385,16 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
             wildcard_ips = parse_wildcard_ips(wildcard_ips)
         except ValueError as e:
             console.print(f"[bold red]Invalid --wildcard-ips:[/bold red] {e}")
+            sys.exit(2)
+
+    if exclude_cname:
+        # Compiled up front like --exclude-status/--exclude-ip so a
+        # bad glob fails fast with exit 2, before any network work.
+        try:
+            exclude_cname = parse_exclude_patterns(exclude_cname,
+                                                   name="exclude-cname")
+        except ValueError as e:
+            console.print(f"[bold red]Invalid --exclude-cname:[/bold red] {e}")
             sys.exit(2)
 
     # Normalize the target up front: internationalized names become
@@ -731,7 +755,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                        titles=titles, resumed_count=len(resumed_applied),
                        final_urls=final_urls,
                        redirect_counts=redirect_counts,
-                       body_hashes=body_hashes)
+                       body_hashes=body_hashes,
+                       exclude_cname=exclude_cname)
 
     except KeyboardInterrupt:
         # Same merge as the normal path: the output keeps the resumed
@@ -749,7 +774,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                        titles=titles, resumed_count=len(resumed_applied),
                        final_urls=final_urls,
                        redirect_counts=redirect_counts,
-                       body_hashes=body_hashes)
+                       body_hashes=body_hashes,
+                       exclude_cname=exclude_cname)
         sys.exit(130)
 
 

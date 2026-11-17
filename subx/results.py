@@ -14,6 +14,8 @@ one clean, ordered list.
 import ipaddress
 import json
 
+from .filters import excluded_cname
+
 
 def load_resumed_results(path):
     """Read a previous SubX ``-o`` JSON output file for ``--resume``.
@@ -237,6 +239,19 @@ def parse_exclude_statuses(value):
     if not codes:
         raise ValueError("--exclude-status needs at least one status code")
     return frozenset(codes)
+
+
+def filter_excluded_cname_results(results, compiled):
+    """Drop rows whose CNAME alias matches any compiled glob pattern.
+
+    Used by ``--exclude-cname``: hides e.g. known CDN/alias noise the
+    way ``--exclude-sub`` hides brute-force noise. Run after
+    ``dedupe_results``/``sort_results`` so merged rows are matched on
+    their final alias, and rows with no alias are never dropped --
+    there is nothing to match.
+    """
+    return [row for row in results
+            if not excluded_cname(row[4], compiled)]
 
 
 def parse_wildcard_ips(value):

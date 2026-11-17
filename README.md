@@ -35,6 +35,7 @@
   - `--only-source crtsh` runs just one passive source (crtsh, hackertarget, alienvault, or urlscan; repeatable) — for debugging a source or when one is rate-limiting
   - `--exclude-status 403,404` hides results with those HTTP status codes, applied after dedupe — ideal for cutting 403/404 noise from pipelines
   - `--exclude-ip 203.0.113.0/24` hides results whose resolved IPs fall in the given ranges — ideal for cutting CDN-blanketed noise from pipelines
+  - `--exclude-cname '*.cloudfront.net'` hides results whose CNAME alias matches the glob (repeatable), applied after dedupe — ideal for cutting known CDN/alias noise from pipelines
   - `--no-wildcard-check` skips the wildcard-detection probes entirely for targets already known to be non-wildcard
   - `--titles` records each live host's HTML `<title>` in a new results column (one extra GET per live row, blank on any failure) — handy for telling lookalike subdomains apart at a glance
   - Redirects are followed and the final URL is recorded: when a probe's redirect chain lands on a different host or path than the subdomain probed, the results gain a `Final URL` column (and a `final_url` field in JSON, `Final URL` column in CSV, `=> URL` suffix in txt) so redirect chains stay visible instead of only the original name. The hop count is recorded too, as a `redirects` field in the JSON output (0 for a direct response, null for DNS-only rows), so long chains and redirect loops stand out without re-fetching; `--resume` carries prior hop counts through
@@ -201,7 +202,7 @@ All unique subdomains found are combined.
 ### 3. Active Brute-Forcing
 Each word from the wordlist is prefixed to the domain (`api.example.com`), resolved via DNS, and checked against the wildcard IP set. Subdomains found this way that were also found passively are tagged as source **Both**; otherwise **Passive** or **Brute**.
 
-On noisy targets, `--exclude-sub PATTERN` (repeatable) skips brute-force candidates matching the glob — e.g. `--exclude-sub '*.blog.*'` drops everything under any `blog` subdomain before any DNS query is made. Patterns are matched against the full candidate name, case-insensitively; an invalid (empty) pattern fails fast with exit code 2. The flag applies to brute-force only, not passive candidates.
+On noisy targets, `--exclude-sub PATTERN` (repeatable) skips brute-force candidates matching the glob — e.g. `--exclude-sub '*.blog.*'` drops everything under any `blog` subdomain before any DNS query is made. Patterns are matched against the full candidate name, case-insensitively; an invalid (empty) pattern fails fast with exit code 2. The flag applies to brute-force only, not passive candidates. For noise that only shows up after validation, `--exclude-cname GLOB` (repeatable) drops result rows whose CNAME alias matches the glob — e.g. `--exclude-cname '*.cloudfront.net'` hides every row aliased under CloudFront — applied after dedupe, so merged rows are matched on their final alias; rows with no alias are never dropped, and an invalid (empty) pattern fails fast with exit code 2.
 
 Case-variant duplicates in the wordlist (e.g. `Admin` and `admin`, common in wordlists merged from several sources) are collapsed to a single candidate before any DNS query is made — DNS is case-insensitive, so probing both would waste queries. The dropped count is logged.
 
@@ -279,6 +280,7 @@ enumeration control:
   --exclude-status CODES
                        Hide results whose HTTP status is in the comma-separated list (e.g. "403,404")
   --exclude-ip IPS     Hide results with a resolved IP in the comma-separated IP/CIDR list (e.g. "203.0.113.0/24")
+  --exclude-cname GLOB Hide results whose CNAME alias matches the glob (e.g. "*.cloudfront.net"); repeatable, applied after dedupe
   --no-wildcard-check  Skip wildcard detection entirely (for targets already known to be non-wildcard)
   --wildcard-ips IPS   Use these comma-separated wildcard IPs for filtering (e.g. "203.0.113.7,198.51.100.42") instead of running the detection probes; cannot be combined with --no-wildcard-check
   --no-follow-redirects
@@ -380,7 +382,7 @@ jq -r '.results[].subdomain' subs.json | httprobe
 subx/
 ├── cli.py           # Command-line interface and argument parsing
 ├── enumerator.py    # Passive OSINT and DNS brute-forcing logic
-├── filters.py       # --exclude-sub glob matching (stdlib-only)
+├── filters.py       # --exclude-sub / --exclude-cname glob matching (stdlib-only)
 ├── wordlist.py      # wordlist loading + case-variant dedup (stdlib-only)
 ├── validator.py     # DNS resolution, wildcard detection, HTTP/HTTPS validation
 ├── utils.py         # Terminal UI, logging, and formatting

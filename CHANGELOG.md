@@ -6,6 +6,7 @@ All notable changes to SubX are documented here. Format follows
 ## [Unreleased]
 
 ### Added
+- `--exclude-cname GLOB` CLI flag: drop result rows whose CNAME alias matches a glob (repeatable, e.g. `--exclude-cname '*.cloudfront.net'`), applied after dedupe like `--exclude-status`/`--exclude-ip` so pipelines can hide known CDN/alias noise; rows with no alias are never dropped, and an invalid (empty) pattern fails fast with exit 2. New `excluded_cname()` in `subx/filters.py` (reusing `parse_exclude_patterns`, now with a flag-name label for its error message) and `filter_excluded_cname_results()` in `subx/results.py`, threaded through the normal and KeyboardInterrupt render paths with a hidden-count log line. 7 new tests in `tests/test_exclude_cname.py`; README updated.
 - `--wildcard-ips IPS` CLI flag: supply known wildcard IPs (comma-separated, e.g. `"203.0.113.7,198.51.100.42"`) instead of running the two random-subdomain detection probes, for repeat scans of a target whose wildcard answers are already known; the IPs are validated up front (junk fails fast with exit 2) and handed to the validator at construction, so the validation-phase filter applies from the first candidate. Cannot be combined with `--no-wildcard-check` (exit 2). New `parse_wildcard_ips()` in `subx/results.py`; 7 new tests in `tests/test_wildcard_ips.py`; README updated.
 - Response-body hash: every probe that gets a 2xx/3xx response
   records a short SHA-256 prefix of the response body (first 12 hex
