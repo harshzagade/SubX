@@ -239,6 +239,38 @@ def parse_exclude_statuses(value):
     return frozenset(codes)
 
 
+def parse_wildcard_ips(value):
+    """Parse a comma-separated ``--wildcard-ips`` value into IP strings.
+
+    Each token must be a valid IPv4 or IPv6 address; anything else
+    raises ``ValueError`` so the CLI can fail fast instead of
+    silently filtering nothing. Returns a frozenset of normalized
+    address strings (``ipaddress`` canonical form, so e.g.
+    ``2001:0db8::1`` and ``2001:db8::1`` compare equal), matching how
+    resolved IPs are stored on the validator's ``wildcard_ips`` set.
+    """
+    ips = set()
+    for token in str(value).split(","):
+        token = token.strip()
+        if not token:
+            raise ValueError(
+                "--wildcard-ips needs at least one IP address "
+                "(expected comma-separated values like "
+                "'203.0.113.7,198.51.100.42')"
+            )
+        try:
+            ips.add(str(ipaddress.ip_address(token)))
+        except ValueError:
+            raise ValueError(
+                f"invalid IP address {token!r} in --wildcard-ips "
+                "(expected comma-separated values like "
+                "'203.0.113.7,198.51.100.42')"
+            ) from None
+    if not ips:
+        raise ValueError("--wildcard-ips needs at least one IP address")
+    return frozenset(ips)
+
+
 def filter_excluded_statuses(results, codes):
     """Drop rows whose HTTP status is in ``codes``.
 

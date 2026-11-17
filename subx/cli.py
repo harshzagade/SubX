@@ -20,7 +20,8 @@ from .results import (dedupe_results, sort_results, filter_live_results,
                       is_live_status, normalize_subdomain,
                       load_resumed_results,
                       parse_exclude_statuses, filter_excluded_statuses,
-                      parse_exclude_ip_networks, filter_excluded_ip_results)
+                      parse_exclude_ip_networks, filter_excluded_ip_results,
+                      parse_wildcard_ips)
 from .takeover import takeover_hint
 from .utils import setup_logging, LOGO, console, RichHelpCommand
 import urllib3
@@ -314,6 +315,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Comma-separated IPs/CIDR ranges to hide from results (e.g. "203.0.113.0/24"); applied after dedupe.')
 @click.option('--no-wildcard-check', is_flag=True,
               help='Skip wildcard detection entirely (for targets already known to be non-wildcard).')
+@click.option('--wildcard-ips', default=None,
+              help='Comma-separated wildcard IPs to filter on (e.g. "203.0.113.7,198.51.100.42") instead of running the two random-subdomain detection probes; cannot be combined with --no-wildcard-check.')
 @click.option('--no-follow-redirects', is_flag=True,
               help='Report the first response status instead of following redirects (a 301 stays a 301).')
 @click.option('--head-only', is_flag=True,
@@ -324,7 +327,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False, wildcard_ips=None):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -352,6 +355,22 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
             exclude_ip = parse_exclude_ip_networks(exclude_ip)
         except ValueError as e:
             console.print(f"[bold red]Invalid --exclude-ip:[/bold red] {e}")
+            sys.exit(2)
+
+    if wildcard_ips:
+        # Supplied wildcard IPs replace the detection probes: the
+        # operator already knows the wildcard answers (e.g. from a
+        # previous scan), so two random-subdomain queries are saved
+        # and the filter applies from the first candidate. Junk
+        # fails fast here, before any network work.
+        if no_wildcard_check:
+            console.print("[bold red]--wildcard-ips cannot be combined with --no-wildcard-check: "
+                          "supplying wildcard IPs already implies the check runs.[/bold red]")
+            sys.exit(2)
+        try:
+            wildcard_ips = parse_wildcard_ips(wildcard_ips)
+        except ValueError as e:
+            console.print(f"[bold red]Invalid --wildcard-ips:[/bold red] {e}")
             sys.exit(2)
 
     # Normalize the target up front: internationalized names become
@@ -419,7 +438,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                               delay=delay,
                               follow_redirects=not no_follow_redirects,
                               user_agent=user_agent,
-                              head_only=head_only)
+                              head_only=head_only,
+                              wildcard_ips=wildcard_ips)
     except ValueError as e:
         console.print(f"[bold red]Invalid option:[/bold red] {e}")
         sys.exit(2)
@@ -456,7 +476,15 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
 
     try:
         # 0. Wildcard Detection
-        if no_wildcard_check:
+        if wildcard_ips:
+            # Known wildcard IPs were supplied on the command line:
+            # the filter is already in place on the validator (passed
+            # at construction), so the two detection probes are
+            # skipped entirely.
+            log.info(f"[bold blue]i[/bold blue] Using supplied wildcard IPs: "
+                     f"[dim]{', '.join(sorted(wildcard_ips))}[/dim] "
+                     f"(detection probes skipped)")
+        elif no_wildcard_check:
             # Targets already known to be non-wildcard skip both probe
             # queries; validator.wildcard_ips stays empty, so the
             # validation-phase filter lets everything through.

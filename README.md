@@ -185,7 +185,7 @@ A real scan prints a rich results table with columns **Subdomain**, **Status**, 
 ## 🎯 How It Works
 
 ### 1. Wildcard Detection
-Before anything else, SubX probes two random 15-character subdomains of the target. A wildcard is declared only when at least two probes resolve AND agree on at least one IP — a single resolving probe is treated as an anycast fluke and ignored, so one stray answer can no longer poison the filter for the whole scan. The agreed wildcard IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally.
+Before anything else, SubX probes two random 15-character subdomains of the target. A wildcard is declared only when at least two probes resolve AND agree on at least one IP — a single resolving probe is treated as an anycast fluke and ignored, so one stray answer can no longer poison the filter for the whole scan. The agreed wildcard IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally. When the wildcard IPs are already known (e.g. from a previous scan), `--wildcard-ips "203.0.113.7,198.51.100.42"` supplies them directly instead of running the two detection probes; each value must be a plain IP address (v4 or v6), and it cannot be combined with `--no-wildcard-check`.
 
 ### 2. Passive Enumeration
 Four OSINT sources are queried in parallel (each with a configurable timeout, 15 seconds by default via `--source-timeout`; a source that fails with a transient HTTP error — connection error or timeout — is retried once, and a source that still fails is named in the scan summary's passive-source-failure count instead of silently disappearing):
@@ -280,6 +280,7 @@ enumeration control:
                        Hide results whose HTTP status is in the comma-separated list (e.g. "403,404")
   --exclude-ip IPS     Hide results with a resolved IP in the comma-separated IP/CIDR list (e.g. "203.0.113.0/24")
   --no-wildcard-check  Skip wildcard detection entirely (for targets already known to be non-wildcard)
+  --wildcard-ips IPS   Use these comma-separated wildcard IPs for filtering (e.g. "203.0.113.7,198.51.100.42") instead of running the detection probes; cannot be combined with --no-wildcard-check
   --no-follow-redirects
                        Report the first response status instead of following redirects (a 301 stays a 301)
   --head-only          Use HEAD instead of GET for HTTP probes (lighter, no body downloaded) when only the status code matters; cannot be combined with --titles
