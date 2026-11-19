@@ -20,6 +20,7 @@ from .results import (dedupe_results, sort_results, filter_live_results,
                       is_live_status, normalize_subdomain,
                       load_resumed_results,
                       parse_exclude_statuses, filter_excluded_statuses,
+                      parse_include_statuses, filter_included_statuses,
                       parse_exclude_ip_networks, filter_excluded_ip_results,
                       parse_wildcard_ips,
                       filter_excluded_cname_results)
@@ -44,7 +45,8 @@ def render_results(console, log, results, found_subdomains, validator,
                    output, only_live, quiet, start_time, interrupted=False,
                    exclude_status=None, exclude_ip=None, titles=None,
                    resumed_count=0, final_urls=None, redirect_counts=None,
-                   body_hashes=None, exclude_cname=None):
+                   body_hashes=None, exclude_cname=None,
+                   include_status=None):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -74,6 +76,9 @@ def render_results(console, log, results, found_subdomains, validator,
     grouped without re-fetching. ``exclude_cname`` is the compiled
     ``--exclude-cname`` glob list; rows whose CNAME alias matches are
     dropped after dedupe (like ``--exclude-status``/``--exclude-ip``),
+    with the hidden count logged. ``include_status`` is the compiled
+    ``--include-status`` code set; only rows whose HTTP status is in
+    it are kept (DNS-only rows carry no code, so they are dropped),
     with the hidden count logged.
     """
     duration = time.time() - start_time
@@ -107,6 +112,14 @@ def render_results(console, log, results, found_subdomains, validator,
             hidden = status_total - len(results)
             if hidden:
                 log.info(f"[dim]--exclude-status: hid {hidden} row(s) with excluded status code(s); "
+                         f"showing {len(results)}.[/dim]")
+
+        if include_status:
+            status_total = len(results)
+            results = filter_included_statuses(results, include_status)
+            hidden = status_total - len(results)
+            if hidden:
+                log.info(f"[dim]--include-status: hid {hidden} row(s) without an included status code; "
                          f"showing {len(results)}.[/dim]")
 
         if exclude_ip:
@@ -323,6 +336,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Show only subdomains with a working HTTP service (hide DNS-only rows).')
 @click.option('--exclude-status', default=None,
               help='Comma-separated HTTP status codes to hide from results (e.g. "403,404"); applied after dedupe.')
+@click.option('--include-status', default=None,
+              help='Comma-separated HTTP status codes to keep in results (e.g. "200,301"); rows with any other status, including DNS-only rows, are hidden; applied after dedupe; cannot be combined with --exclude-status.')
 @click.option('--exclude-ip', default=None,
               help='Comma-separated IPs/CIDR ranges to hide from results (e.g. "203.0.113.0/24"); applied after dedupe.')
 @click.option('--exclude-cname', multiple=True,
@@ -341,7 +356,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False, wildcard_ips=None, exclude_cname=()):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False, wildcard_ips=None, exclude_cname=(), include_status=None):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -362,6 +377,19 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
             exclude_status = parse_exclude_statuses(exclude_status)
         except ValueError as e:
             console.print(f"[bold red]Invalid --exclude-status:[/bold red] {e}")
+            sys.exit(2)
+
+    if include_status:
+        # The include list and the exclude list pull in opposite
+        # directions; combining them is a mistake, not a filter.
+        if exclude_status:
+            console.print("[bold red]--include-status cannot be combined with --exclude-status: "
+                          "pick one status filter.[/bold red]")
+            sys.exit(2)
+        try:
+            include_status = parse_include_statuses(include_status)
+        except ValueError as e:
+            console.print(f"[bold red]Invalid --include-status:[/bold red] {e}")
             sys.exit(2)
 
     if exclude_ip:
@@ -756,7 +784,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                        final_urls=final_urls,
                        redirect_counts=redirect_counts,
                        body_hashes=body_hashes,
-                       exclude_cname=exclude_cname)
+                       exclude_cname=exclude_cname,
+                       include_status=include_status)
 
     except KeyboardInterrupt:
         # Same merge as the normal path: the output keeps the resumed
@@ -775,7 +804,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                        final_urls=final_urls,
                        redirect_counts=redirect_counts,
                        body_hashes=body_hashes,
-                       exclude_cname=exclude_cname)
+                       exclude_cname=exclude_cname,
+                       include_status=include_status)
         sys.exit(130)
 
 

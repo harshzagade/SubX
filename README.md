@@ -34,6 +34,7 @@
   - `--only-live` shows only subdomains with a working HTTP service, hiding DNS-only rows — ideal for recon pipelines
   - `--only-source crtsh` runs just one passive source (crtsh, hackertarget, alienvault, or urlscan; repeatable) — for debugging a source or when one is rate-limiting
   - `--exclude-status 403,404` hides results with those HTTP status codes, applied after dedupe — ideal for cutting 403/404 noise from pipelines
+  - `--include-status 200,301` keeps only results with those HTTP status codes (DNS-only rows are dropped, since they carry no code), applied after dedupe — ideal for pipelines that only care about 200s; cannot be combined with `--exclude-status`
   - `--exclude-ip 203.0.113.0/24` hides results whose resolved IPs fall in the given ranges — ideal for cutting CDN-blanketed noise from pipelines
   - `--exclude-cname '*.cloudfront.net'` hides results whose CNAME alias matches the glob (repeatable), applied after dedupe — ideal for cutting known CDN/alias noise from pipelines
   - `--no-wildcard-check` skips the wildcard-detection probes entirely for targets already known to be non-wildcard
@@ -279,6 +280,8 @@ enumeration control:
   --only-live          Show only subdomains with a working HTTP service (hides DNS-only rows)
   --exclude-status CODES
                        Hide results whose HTTP status is in the comma-separated list (e.g. "403,404")
+  --include-status CODES
+                       Keep only results whose HTTP status is in the comma-separated list (e.g. "200,301"); DNS-only rows are dropped; cannot be combined with --exclude-status
   --exclude-ip IPS     Hide results with a resolved IP in the comma-separated IP/CIDR list (e.g. "203.0.113.0/24")
   --exclude-cname GLOB Hide results whose CNAME alias matches the glob (e.g. "*.cloudfront.net"); repeatable, applied after dedupe
   --no-wildcard-check  Skip wildcard detection entirely (for targets already known to be non-wildcard)
@@ -336,10 +339,10 @@ files all show the same clean list.
 ```
 The `stats` block reports scan totals for pipeline consumers:
 wall-clock duration, candidates collected across phases, rows
-validation produced (before `--only-live`/`--exclude-status`
-display filtering), rows carried over from a `--resume` file
-instead of re-validated this run, wildcard false positives dropped,
-and DNS results reused from the cache.
+validation produced (before `--only-live`/`--exclude-status`/
+`--include-status` display filtering), rows carried over from a
+`--resume` file instead of re-validated this run, wildcard false
+positives dropped, and DNS results reused from the cache.
 
 ### CSV
 ```csv

@@ -219,8 +219,8 @@ def filter_live_results(results):
     return [row for row in results if is_live_status(row[1])]
 
 
-def parse_exclude_statuses(value):
-    """Parse a comma-separated ``--exclude-status`` value into codes.
+def _parse_status_codes(value, flag):
+    """Shared comma-separated status-code grammar for the status filters.
 
     Each token must be a three-digit HTTP status code (100-999);
     anything else raises ``ValueError`` so the CLI can fail fast
@@ -232,13 +232,36 @@ def parse_exclude_statuses(value):
         token = token.strip()
         if not token.isdigit() or not 100 <= int(token) <= 999:
             raise ValueError(
-                f"invalid status code {token!r} in --exclude-status "
+                f"invalid status code {token!r} in {flag} "
                 "(expected comma-separated codes like '403,404')"
             )
         codes.add(token)
     if not codes:
-        raise ValueError("--exclude-status needs at least one status code")
+        raise ValueError(f"{flag} needs at least one status code")
     return frozenset(codes)
+
+
+def parse_exclude_statuses(value):
+    """Parse a comma-separated ``--exclude-status`` value into codes."""
+    return _parse_status_codes(value, "--exclude-status")
+
+
+def parse_include_statuses(value):
+    """Parse a comma-separated ``--include-status`` value into codes."""
+    return _parse_status_codes(value, "--include-status")
+
+
+def filter_included_statuses(results, codes):
+    """Keep only rows whose HTTP status is in ``codes``.
+
+    Used by ``--include-status``: the inverse of
+    ``--exclude-status``, for pipelines that only care about e.g.
+    200s. Run after ``dedupe_results``/``sort_results`` so a merged
+    row's best status is what gets matched, and DNS-only rows
+    (``"No HTTP"``/``"N/A"``) are dropped -- they carry no numeric
+    code to keep.
+    """
+    return [row for row in results if str(row[1]) in codes]
 
 
 def filter_excluded_cname_results(results, compiled):
