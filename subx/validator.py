@@ -118,7 +118,7 @@ class Validator:
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
                  dns_retries=None, resolver_ip=None, http_retries=None,
                  doh_url=None, delay=None, follow_redirects=True,
-                 user_agent=None, head_only=False):
+                 user_agent=None, head_only=False, dns_tcp=False):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -228,6 +228,13 @@ class Validator:
         # no body, so ``fetch_title`` always returns "" with this on;
         # the CLI rejects the ``--head-only`` + ``--titles`` combo.
         self.head_only = bool(head_only)
+        # Whether DNS queries go over TCP instead of UDP (``--dns-tcp``).
+        # Some networks filter UDP port 53 or truncate large UDP
+        # answers; TCP queries work there at the cost of one
+        # connection per query. With a DoH endpoint configured this
+        # is a no-op -- DoH already runs over HTTPS/TCP -- so it is
+        # only honored on the plain resolver path in ``_resolve``.
+        self.dns_tcp = bool(dns_tcp)
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -304,12 +311,18 @@ class Validator:
         With a DoH endpoint configured, queries go over HTTPS instead
         of UDP; the transport is chosen here so every caller (wildcard
         probes, CNAME chains, A/AAAA lookups) uses it automatically.
+        With ``dns_tcp`` set, the plain resolver path sends queries
+        over TCP (``tcp=True``) instead of UDP; the ``tcp`` kwarg is
+        only passed when the flag is on, so the default call keeps
+        dnspython's plain ``resolve(name, rdtype)`` shape.
         """
         last_error = None
         for _ in range(self.dns_retries + 1):
             try:
                 if self.doh_url is not None:
                     return self._resolve_doh(name, rdtype)
+                if self.dns_tcp:
+                    return self.resolver.resolve(name, rdtype, tcp=True)
                 return self.resolver.resolve(name, rdtype)
             except dns.resolver.Timeout as e:
                 last_error = e
