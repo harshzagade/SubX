@@ -219,6 +219,29 @@ def filter_live_results(results):
     return [row for row in results if is_live_status(row[1])]
 
 
+def count_statuses(results):
+    """Count rows per HTTP status, for the scan summary.
+
+    Numeric codes sort first in ascending order (200, 301, 404),
+    then the DNS-only labels (``"N/A"``, ``"No HTTP"``)
+    alphabetically, so the summary reads as the scan's 200/301/404
+    makeup at a glance. Counts are taken from the rows passed in --
+    the caller runs this after the display filters, so the breakdown
+    matches the rendered table.
+    """
+    counts = {}
+    for row in results:
+        status = str(row[1])
+        counts[status] = counts.get(status, 0) + 1
+
+    def _order(status):
+        if status.isdigit():
+            return (0, int(status))
+        return (1, status)
+
+    return {s: counts[s] for s in sorted(counts, key=_order)}
+
+
 def _parse_status_codes(value, flag):
     """Shared comma-separated status-code grammar for the status filters.
 

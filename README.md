@@ -181,7 +181,7 @@ Real terminal capture from SubX v0.1.0 (`subx --help` — the only command that 
 
 ![SubX --help](assets/screenshots/help.png)
 
-A real scan prints a rich results table with columns **Subdomain**, **Status**, **Source** (Passive / Brute / Both), and **IP Addresses**, followed by a summary line (`Finished in Xs. Found N active subdomains.`).
+A real scan prints a rich results table with columns **Subdomain**, **Status**, **Source** (Passive / Brute / Both), and **IP Addresses**, followed by a summary line (`Finished in Xs. Found N active subdomains.`), per-source counts (`Sources: ...`), and a per-status breakdown (`Statuses: 200: 3, 301: 1, No HTTP: 2`) showing the 200/301/404 makeup at a glance.
 
 ---
 
@@ -334,6 +334,11 @@ files all show the same clean list.
     "candidates_collected": 42,
     "validated": 18,
     "resumed": 0,
+    "status_breakdown": {
+      "200": 12,
+      "301": 4,
+      "No HTTP": 2
+    },
     "wildcard_filtered": 2,
     "dns_cache_hits": 7
   }
@@ -343,8 +348,10 @@ The `stats` block reports scan totals for pipeline consumers:
 wall-clock duration, candidates collected across phases, rows
 validation produced (before `--only-live`/`--exclude-status`/
 `--include-status` display filtering), rows carried over from a
-`--resume` file instead of re-validated this run, wildcard false
-positives dropped, and DNS results reused from the cache.
+`--resume` file instead of re-validated this run, the per-status
+breakdown of the displayed rows (numeric codes ascending, then the
+DNS-only labels), wildcard false positives dropped, and DNS results
+reused from the cache.
 
 ### CSV
 ```csv

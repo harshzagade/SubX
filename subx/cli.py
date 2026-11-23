@@ -17,6 +17,7 @@ from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
 from .wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
 from .results import (dedupe_results, sort_results, filter_live_results,
+                      count_statuses,
                       is_live_status, normalize_subdomain,
                       load_resumed_results,
                       parse_exclude_statuses, filter_excluded_statuses,
@@ -138,6 +139,11 @@ def render_results(console, log, results, found_subdomains, validator,
                 log.info(f"[dim]--exclude-cname: hid {hidden} row(s) with an excluded CNAME alias; "
                          f"showing {len(results)}.[/dim]")
 
+        # Status breakdown: counted once here (after the display
+        # filters, like the source counts below) so the text summary
+        # line and the JSON stats block agree with the rendered table.
+        status_counts = count_statuses(results)
+
         # Takeover hints are derived from the CNAME alias each row
         # already carries -- no extra requests, just a pattern match
         # against known dangling-service suffixes. Computed once here
@@ -223,6 +229,7 @@ def render_results(console, log, results, found_subdomains, validator,
 
             console.print(f"\n[dim]Finished in {duration:.2f}s. Found {len(results)} active subdomains.[/dim]")
             console.print(f"[dim]Sources: {', '.join(summary_items)}[/dim]")
+            console.print(f"[dim]Statuses: {', '.join(f'{s}: {c}' for s, c in status_counts.items())}[/dim]")
             if validator.wildcard_filtered:
                 console.print(f"[dim]Filtered {validator.wildcard_filtered} wildcard false positive(s).[/dim]")
             if validator.dns_cache_hits:
@@ -265,6 +272,7 @@ def render_results(console, log, results, found_subdomains, validator,
                             "candidates_collected": len(found_subdomains) + resumed_count,
                             "validated": validated_count,
                             "resumed": resumed_count,
+                            "status_breakdown": status_counts,
                             "wildcard_filtered": getattr(validator, "wildcard_filtered", 0),
                             "dns_cache_hits": getattr(validator, "dns_cache_hits", 0),
                         },
