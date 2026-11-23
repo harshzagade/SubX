@@ -332,6 +332,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='DNS-over-HTTPS endpoint URL (e.g. https://dns.cloudflare.com/dns-query) instead of UDP DNS; cannot be combined with --resolver.')
 @click.option('--dns-tcp', is_flag=True,
               help='Send DNS queries over TCP instead of UDP (for networks where UDP port 53 is filtered or truncated); a no-op with --doh, which already uses TCP.')
+@click.option('--dns-port', type=click.IntRange(min=1, max=65535), default=53, show_default=True,
+              help='DNS port to query the resolver on (for resolvers listening off the standard port 53, e.g. a local stub on 5353); a no-op with --doh, which uses the port in its URL.')
 @click.option('--resume', default=None, type=click.Path(),
               help='Resume from a previous -o JSON output: skip re-validating hosts already recorded there.')
 @click.option('--output', '-o', help='Path to output file (json, csv, or txt).')
@@ -366,7 +368,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False, wildcard_ips=None, exclude_cname=(), include_status=None, dns_tcp=False):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False, wildcard_ips=None, exclude_cname=(), include_status=None, dns_tcp=False, dns_port=53):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -502,6 +504,7 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                               user_agent=user_agent,
                               head_only=head_only,
                               dns_tcp=dns_tcp,
+                              dns_port=dns_port,
                               wildcard_ips=wildcard_ips)
     except ValueError as e:
         console.print(f"[bold red]Invalid option:[/bold red] {e}")
@@ -514,6 +517,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                  "no response body is downloaded")
     if dns_tcp:
         log.info("[bold blue]i[/bold blue] DNS queries go over TCP instead of UDP (--dns-tcp)")
+    if dns_port != 53:
+        log.info(f"[bold blue]i[/bold blue] DNS queries go to port {dns_port} instead of 53 (--dns-port)")
     found_subdomains = {}  # subdomain -> source
     # Validated rows, kept outside the try so a KeyboardInterrupt
     # still renders and saves what was found before the interrupt.

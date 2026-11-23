@@ -45,6 +45,7 @@
   - The probe response body is hashed too: a `body_hash` field in the JSON output carries the first 12 hex chars of the SHA-256 of the body (null for DNS-only rows and for `--head-only` probes, which carry no body), so identical pages across subdomains — default pages, parking pages — can be grouped without re-fetching; `--resume` carries prior hashes through
   - `--doh URL` sends DNS queries to a DNS-over-HTTPS endpoint (e.g. Cloudflare's `https://dns.cloudflare.com/dns-query`) instead of UDP port 53 — for networks where port 53 is filtered
   - `--dns-tcp` sends DNS queries over TCP instead of UDP — for networks where UDP port 53 is filtered or truncated; a no-op with `--doh`, which already runs over TCP
+  - `--dns-port PORT` queries the resolver on a non-standard DNS port (e.g. a local stub on 5353) instead of the standard port 53; a no-op with `--doh`, which uses the port in its URL
 
 ---
 
@@ -271,6 +272,7 @@ scan settings:
   --resolver IP         Custom DNS resolver IP (e.g. 1.1.1.1) instead of the system resolver
   --doh URL             DNS-over-HTTPS endpoint (e.g. https://dns.cloudflare.com/dns-query) instead of UDP DNS; cannot be combined with --resolver
   --dns-tcp             Send DNS queries over TCP instead of UDP (a no-op with --doh, which already uses TCP)
+  --dns-port PORT       DNS port to query the resolver on (default: 53; for resolvers listening off the standard port, e.g. a local stub on 5353; a no-op with --doh)
   --source-timeout SEC  Timeout per passive-source request (default: 15.0)
 
 enumeration control:

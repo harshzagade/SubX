@@ -103,6 +103,10 @@ class Validator:
     #: protocol immediately.
     DEFAULT_HTTP_RETRIES = 1
 
+    #: DNS port the resolver queries on when the caller does not pass
+    #: an explicit value -- the standard port 53.
+    DEFAULT_DNS_PORT = 53
+
     #: Number of independent random subdomains probed by
     #: :meth:`detect_wildcard`. A single probe can hit an anycast fluke
     #: -- one random name resolving to an unrelated anycast IP -- which
@@ -118,7 +122,8 @@ class Validator:
     def __init__(self, wildcard_ips=None, dns_timeout=None, http_timeout=None,
                  dns_retries=None, resolver_ip=None, http_retries=None,
                  doh_url=None, delay=None, follow_redirects=True,
-                 user_agent=None, head_only=False, dns_tcp=False):
+                 user_agent=None, head_only=False, dns_tcp=False,
+                 dns_port=None):
         self.wildcard_ips = wildcard_ips or set()
         if dns_timeout is None:
             dns_timeout = self.DEFAULT_DNS_TIMEOUT
@@ -235,6 +240,23 @@ class Validator:
         # is a no-op -- DoH already runs over HTTPS/TCP -- so it is
         # only honored on the plain resolver path in ``_resolve``.
         self.dns_tcp = bool(dns_tcp)
+        # DNS port the resolver queries on (``--dns-port``). Some
+        # resolvers listen off the standard port 53 (e.g. a local
+        # stub on 5353); dnspython sends every query -- UDP or TCP --
+        # to ``Resolver.port``. The default 53 keeps the old
+        # behaviour. With a DoH endpoint configured this is a no-op:
+        # DoH queries go to the port in the endpoint URL, not to the
+        # plain resolver. Non-integer or out-of-range values fail
+        # fast here rather than breaking mid-scan.
+        if dns_port is None:
+            dns_port = self.DEFAULT_DNS_PORT
+        if (isinstance(dns_port, bool) or not isinstance(dns_port, int)
+                or not 1 <= dns_port <= 65535):
+            raise ValueError(
+                f"dns_port must be an integer between 1 and 65535, "
+                f"got {dns_port!r}"
+            )
+        self.dns_port = dns_port
         # How many candidates were dropped as wildcard false positives.
         # Incremented from worker threads, so updates are serialized.
         self.wildcard_filtered = 0
@@ -266,6 +288,7 @@ class Validator:
             self.resolver = dns.resolver.Resolver()
         self.resolver.timeout = dns_timeout
         self.resolver.lifetime = dns_timeout
+        self.resolver.port = dns_port
 
     def _resolve_doh(self, name, rdtype):
         """Resolve ``name``/``rdtype`` over DNS-over-HTTPS.
