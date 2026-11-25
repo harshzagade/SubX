@@ -7,10 +7,11 @@ real candidates for the whole scan. ``detect_wildcard`` therefore probes
 wildcard when at least two probes resolve AND agree on at least one IP.
 
 dnspython may not be installed where the suite runs, so the ``dns``
-modules are stubbed. The stub resolver answers each A query by popping
-the next programmed response for the queried domain, so tests can
-simulate agreeing probes, disagreeing probes, and a lone resolving
-probe (the anycast fluke).
+modules are stubbed. The stub resolver answers each query by popping
+the next programmed response for the queried (domain, record type),
+so tests can simulate agreeing probes, disagreeing probes, and a lone
+resolving probe (the anycast fluke) -- for A and AAAA independently,
+since each wildcard probe now resolves both record types.
 """
 
 import importlib
@@ -47,17 +48,23 @@ class _FakeRdata:
 def _install_dns_stub(probe_responses):
     """Stub ``dns``/``dns.resolver``/``dns.exception``.
 
-    ``probe_responses`` maps a domain (lowercased, no trailing dot) to
-    a list of per-probe responses; each response is either a list of
-    IP strings (the probe resolves) or an exception *class* to raise
-    (the probe does not resolve). Every A query pops the next response
-    for its domain; exhausted domains raise ``_NXDOMAIN``.
+    ``probe_responses`` maps a domain (lowercased, no trailing dot)
+    to a per-record-type map of probe responses, e.g.
+    ``{"example.com": {"A": [["1.2.3.4"], ["1.2.3.4"]]}}``; each
+    response is either a list of IP strings (the probe resolves) or
+    an exception *class* to raise (the probe does not resolve).
+    Every query pops the next response for its (domain, rdtype);
+    exhausted (or unprogrammed) record types raise ``_NXDOMAIN``.
     """
     dns = types.ModuleType("dns")
     resolver_mod = types.ModuleType("dns.resolver")
     exception_mod = types.ModuleType("dns.exception")
 
-    queues = {d: list(rs) for d, rs in probe_responses.items()}
+    queues = {
+        (d, rdtype): list(rs)
+        for d, per_type in probe_responses.items()
+        for rdtype, rs in per_type.items()
+    }
 
     class FakeResolver:
         def __init__(self):
@@ -70,7 +77,7 @@ def _install_dns_stub(probe_responses):
                 raise _NoAnswer(key)
             labels = key.split(".")
             domain = ".".join(labels[1:])  # strip the random probe label
-            queue = queues.get(domain, [])
+            queue = queues.get((domain, str(rdtype).upper()), [])
             if not queue:
                 raise _NXDOMAIN(key)
             response = queue.pop(0)
@@ -109,36 +116,38 @@ def validator_factory():
 
 
 _FLUKE_IP = "203.0.113.99"
+_V6_IP = "2001:db8::1"
+_V6_OTHER = "2001:db8::2"
 
 
 def test_two_agreeing_probes_declare_wildcard(validator_factory):
-    v = validator_factory({"example.com": [["1.2.3.4"], ["1.2.3.4"]]})
+    v = validator_factory({"example.com": {"A": [["1.2.3.4"], ["1.2.3.4"]]}})
     assert v.detect_wildcard("example.com") == {"1.2.3.4"}
 
 
 def test_disagreeing_probes_are_not_a_wildcard(validator_factory):
-    v = validator_factory({"example.com": [["1.2.3.4"], ["5.6.7.8"]]})
+    v = validator_factory({"example.com": {"A": [["1.2.3.4"], ["5.6.7.8"]]}})
     assert v.detect_wildcard("example.com") == set()
 
 
 def test_lone_resolving_probe_ignored_as_anycast_fluke(validator_factory):
-    v = validator_factory({"example.com": [[_FLUKE_IP], _NXDOMAIN]})
+    v = validator_factory({"example.com": {"A": [[_FLUKE_IP], _NXDOMAIN]}})
     assert v.detect_wildcard("example.com") == set()
 
 
 def test_timeout_fluke_does_not_poison(validator_factory):
-    v = validator_factory({"example.com": [_Timeout, ["1.2.3.4"]]})
+    v = validator_factory({"example.com": {"A": [_Timeout, ["1.2.3.4"]]}})
     assert v.detect_wildcard("example.com") == set()
 
 
 def test_no_resolving_probes(validator_factory):
-    v = validator_factory({"example.com": [_NXDOMAIN, _NXDOMAIN]})
+    v = validator_factory({"example.com": {"A": [_NXDOMAIN, _NXDOMAIN]}})
     assert v.detect_wildcard("example.com") == set()
 
 
 def test_partial_overlap_returns_common_ips(validator_factory):
     v = validator_factory(
-        {"example.com": [["1.2.3.4", "9.9.9.9"], ["1.2.3.4"]]}
+        {"example.com": {"A": [["1.2.3.4", "9.9.9.9"], ["1.2.3.4"]]}}
     )
     assert v.detect_wildcard("example.com") == {"1.2.3.4"}
 
@@ -147,6 +156,60 @@ def test_probe_queues_are_consumed_in_order(validator_factory):
     # Each probe consumes exactly one programmed response regardless of
     # the random label generated; once the queue is exhausted, no
     # wildcard can be declared.
-    v = validator_factory({"example.com": [["1.2.3.4"], ["1.2.3.4"]]})
+    v = validator_factory({"example.com": {"A": [["1.2.3.4"], ["1.2.3.4"]]}})
     assert v.detect_wildcard("example.com") == {"1.2.3.4"}
     assert v.detect_wildcard("example.com") == set()
+
+
+def test_v6_only_wildcard_declared(validator_factory):
+    # A v6-only wildcard: random names carry no A record at all, but
+    # both probes agree on the same AAAA answer.
+    v = validator_factory({
+        "example.com": {
+            "A": [_NXDOMAIN, _NXDOMAIN],
+            "AAAA": [[_V6_IP], [_V6_IP]],
+        }
+    })
+    assert v.detect_wildcard("example.com") == {_V6_IP}
+
+
+def test_v6_only_disagreement_is_not_a_wildcard(validator_factory):
+    v = validator_factory({
+        "example.com": {
+            "A": [_NXDOMAIN, _NXDOMAIN],
+            "AAAA": [[_V6_IP], [_V6_OTHER]],
+        }
+    })
+    assert v.detect_wildcard("example.com") == set()
+
+
+def test_v6_lone_resolving_probe_ignored_as_fluke(validator_factory):
+    v = validator_factory({
+        "example.com": {
+            "A": [_NXDOMAIN, _NXDOMAIN],
+            "AAAA": [[_V6_IP], _NXDOMAIN],
+        }
+    })
+    assert v.detect_wildcard("example.com") == set()
+
+
+def test_v4_and_v6_both_agree(validator_factory):
+    v = validator_factory({
+        "example.com": {
+            "A": [["1.2.3.4"], ["1.2.3.4"]],
+            "AAAA": [[_V6_IP], [_V6_IP]],
+        }
+    })
+    assert v.detect_wildcard("example.com") == {"1.2.3.4", _V6_IP}
+
+
+def test_v4_agrees_while_v6_disagrees_still_declared(validator_factory):
+    # Agreement is on the union of the two probes' answers: the A
+    # agreement is enough even when the AAAA answers disagree.
+    v = validator_factory({
+        "example.com": {
+            "A": [["1.2.3.4"], ["1.2.3.4"]],
+            "AAAA": [[_V6_IP], [_V6_OTHER]],
+        }
+    })
+    assert v.detect_wildcard("example.com") == {"1.2.3.4"}

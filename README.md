@@ -189,7 +189,7 @@ A real scan prints a rich results table with columns **Subdomain**, **Status**, 
 ## 🎯 How It Works
 
 ### 1. Wildcard Detection
-Before anything else, SubX probes two random 15-character subdomains of the target. A wildcard is declared only when at least two probes resolve AND agree on at least one IP — a single resolving probe is treated as an anycast fluke and ignored, so one stray answer can no longer poison the filter for the whole scan. The agreed wildcard IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally. When the wildcard IPs are already known (e.g. from a previous scan), `--wildcard-ips "203.0.113.7,198.51.100.42"` supplies them directly instead of running the two detection probes; each value must be a plain IP address (v4 or v6), and it cannot be combined with `--no-wildcard-check`.
+Before anything else, SubX probes two random 15-character subdomains of the target for A and AAAA records. A wildcard is declared only when at least two probes resolve AND agree on at least one IP — a single resolving probe is treated as an anycast fluke and ignored, so one stray answer can no longer poison the filter for the whole scan. Probing AAAA as well as A catches v6-only wildcards, where random names resolve to IPv6 addresses but carry no A record. The agreed wildcard IPs are recorded, and any later result resolving only to wildcard IPs is dropped as a false positive. If no wildcard is found, a note is printed and scanning continues normally. When the wildcard IPs are already known (e.g. from a previous scan), `--wildcard-ips "203.0.113.7,198.51.100.42"` supplies them directly instead of running the two detection probes; each value must be a plain IP address (v4 or v6), and it cannot be combined with `--no-wildcard-check`.
 
 ### 2. Passive Enumeration
 Four OSINT sources are queried in parallel (each with a configurable timeout, 15 seconds by default via `--source-timeout`; a source that fails with a transient HTTP error — connection error or timeout — is retried once, and a source that still fails is named in the scan summary's passive-source-failure count instead of silently disappearing):
@@ -225,7 +225,7 @@ Each candidate is resolved to its A records and its AAAA (IPv6) records and then
 ### Wildcard-domain behavior in detail
 
 - **Detection:** before scanning, SubX probes two random 15-character
-  subdomains (A records only) of the target. The target is treated as
+  subdomains (A and AAAA records each) of the target. The target is treated as
   wildcard DNS only when **both** probes resolve **and** their answers
   agree on at least one IP; a lone resolving probe (an anycast fluke)
   is ignored. A yellow `Wildcard detected` warning shows the agreed
@@ -241,7 +241,7 @@ Each candidate is resolved to its A records and its AAAA (IPv6) records and then
   named hosts from certificate logs, and `--no-brute` keeps the scan
   quiet and fast. The yellow wildcard warning is your cue that results
   passed through the filter.
-- **Caveats:** the probes are A-record lookups, so CNAME-based
+- **Caveats:** the probes are A/AAAA lookups, so CNAME-based
   wildcards are not detected. Wildcards whose answers rotate per
   query (round-robin sinks returning disjoint IP sets per probe) will
   not be declared, since the probes must share at least one IP.

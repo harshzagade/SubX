@@ -359,27 +359,35 @@ class Validator:
     def _probe_random_name(self, domain):
         """Resolve a single random subdomain of ``domain``.
 
-        Returns the set of A-record IPs, or an empty set when the name
-        does not resolve -- NXDOMAIN, NoAnswer, timeouts, and other DNS
-        errors all just mean "no wildcard answer for this name".
+        Returns the set of A-record and AAAA-record IPs, or an empty
+        set when the name does not resolve -- NXDOMAIN, NoAnswer,
+        timeouts, and other DNS errors all just mean "no wildcard
+        answer for this name". Each record type is probed
+        independently, so a v6-only wildcard (random names resolve
+        to AAAA records but carry no A record) is caught the same
+        way the A-record one is.
         """
         full_domain = f"{self._random_label()}.{domain}"
-        try:
-            answers = self._resolve(full_domain, 'A')
-            return {str(ip) for ip in answers}
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
-                dns.resolver.Timeout, dns.exception.DNSException):
-            return set()
+        ips = set()
+        for rdtype in ("A", "AAAA"):
+            try:
+                answers = self._resolve(full_domain, rdtype)
+                ips.update(str(ip) for ip in answers)
+            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer,
+                    dns.resolver.Timeout, dns.exception.DNSException):
+                continue
+        return ips
 
     def detect_wildcard(self, domain):
         """Detect if the domain has a wildcard DNS record.
 
-        Probes :attr:`WILDCARD_PROBES` independent random subdomains and
-        declares a wildcard only when at least two probes resolve AND
-        their answers agree on at least one IP. A lone resolving probe
-        (an anycast fluke) is ignored, so a single stray answer can no
-        longer poison ``wildcard_ips`` and filter out genuine subdomains
-        for the rest of the scan.
+        Probes :attr:`WILDCARD_PROBES` independent random subdomains
+        (A and AAAA records each) and declares a wildcard only when
+        at least two probes resolve AND their answers agree on at
+        least one IP. A lone resolving probe (an anycast fluke) is
+        ignored, so a single stray answer can no longer poison
+        ``wildcard_ips`` and filter out genuine subdomains for the
+        rest of the scan.
 
         Returns the agreed-upon wildcard IP set -- empty when the domain
         is not wildcarded or the probes disagree.
