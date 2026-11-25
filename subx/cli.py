@@ -17,7 +17,7 @@ from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
 from .wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
 from .results import (dedupe_results, sort_results, filter_live_results,
-                      count_statuses,
+                      count_statuses, cap_results,
                       is_live_status, normalize_subdomain,
                       load_resumed_results,
                       parse_exclude_statuses, filter_excluded_statuses,
@@ -47,7 +47,7 @@ def render_results(console, log, results, found_subdomains, validator,
                    exclude_status=None, exclude_ip=None, titles=None,
                    resumed_count=0, final_urls=None, redirect_counts=None,
                    body_hashes=None, exclude_cname=None,
-                   include_status=None):
+                   include_status=None, max_results=None):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -80,7 +80,10 @@ def render_results(console, log, results, found_subdomains, validator,
     with the hidden count logged. ``include_status`` is the compiled
     ``--include-status`` code set; only rows whose HTTP status is in
     it are kept (DNS-only rows carry no code, so they are dropped),
-    with the hidden count logged.
+    with the hidden count logged. ``max_results`` is the
+    ``--max-results`` cap: at most that many rows are rendered after
+    the other display filters, with the hidden count logged and
+    recorded in the JSON ``stats`` block; ``None`` means no cap.
     """
     duration = time.time() - start_time
     if results:
@@ -137,6 +140,16 @@ def render_results(console, log, results, found_subdomains, validator,
             hidden = cname_total - len(results)
             if hidden:
                 log.info(f"[dim]--exclude-cname: hid {hidden} row(s) with an excluded CNAME alias; "
+                         f"showing {len(results)}.[/dim]")
+
+        # Row cap: applied last, after dedupe/sort and the other
+        # display filters, so the rendered table, quiet output, and
+        # saved files all show the same first N rows.
+        hidden_by_max = 0
+        if max_results is not None:
+            results, hidden_by_max = cap_results(results, max_results)
+            if hidden_by_max:
+                log.info(f"[dim]--max-results: hid {hidden_by_max} row(s); "
                          f"showing {len(results)}.[/dim]")
 
         # Status breakdown: counted once here (after the display
@@ -275,6 +288,8 @@ def render_results(console, log, results, found_subdomains, validator,
                             "status_breakdown": status_counts,
                             "wildcard_filtered": getattr(validator, "wildcard_filtered", 0),
                             "dns_cache_hits": getattr(validator, "dns_cache_hits", 0),
+                            "max_results": max_results,
+                            "hidden_by_max_results": hidden_by_max,
                         },
                     }
                     with open(output, 'w') as f:
@@ -354,6 +369,8 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Comma-separated IPs/CIDR ranges to hide from results (e.g. "203.0.113.0/24"); applied after dedupe.')
 @click.option('--exclude-cname', multiple=True,
               help='Glob pattern to hide results whose CNAME alias matches it (e.g. "*.cloudfront.net"); repeatable, applied after dedupe.')
+@click.option('--max-results', type=click.IntRange(min=1), default=None,
+              help='Cap the rendered rows after dedupe/sort (e.g. "--max-results 50"); extra rows are hidden and the hidden count is logged and recorded in the JSON stats block, so huge scans stay readable.')
 @click.option('--no-wildcard-check', is_flag=True,
               help='Skip wildcard detection entirely (for targets already known to be non-wildcard).')
 @click.option('--wildcard-ips', default=None,
@@ -368,7 +385,7 @@ def render_results(console, log, results, found_subdomains, validator,
               help='Record the HTML <title> of each live host in a new results column (one extra GET per live row).')
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging.')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all output except results.')
-def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False, wildcard_ips=None, exclude_cname=(), include_status=None, dns_tcp=False, dns_port=53):
+def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_retries, source_timeout, resolver, output, no_passive, no_brute, exclude_sub, no_http, only_live, verbose, quiet, exclude_status=None, exclude_ip=None, no_wildcard_check=False, fetch_titles=False, doh=None, delay=0.0, resume=None, only_source=(), no_follow_redirects=False, user_agent=None, head_only=False, wildcard_ips=None, exclude_cname=(), include_status=None, dns_tcp=False, dns_port=53, max_results=None):
     """SubX - Advanced Subdomain Finder."""
     log = setup_logging(verbose, quiet)
 
@@ -803,7 +820,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                        redirect_counts=redirect_counts,
                        body_hashes=body_hashes,
                        exclude_cname=exclude_cname,
-                       include_status=include_status)
+                       include_status=include_status,
+                       max_results=max_results)
 
     except KeyboardInterrupt:
         # Same merge as the normal path: the output keeps the resumed
@@ -823,7 +841,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                        redirect_counts=redirect_counts,
                        body_hashes=body_hashes,
                        exclude_cname=exclude_cname,
-                       include_status=include_status)
+                       include_status=include_status,
+                       max_results=max_results)
         sys.exit(130)
 
 

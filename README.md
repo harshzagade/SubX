@@ -37,6 +37,7 @@
   - `--include-status 200,301` keeps only results with those HTTP status codes (DNS-only rows are dropped, since they carry no code), applied after dedupe — ideal for pipelines that only care about 200s; cannot be combined with `--exclude-status`
   - `--exclude-ip 203.0.113.0/24` hides results whose resolved IPs fall in the given ranges — ideal for cutting CDN-blanketed noise from pipelines
   - `--exclude-cname '*.cloudfront.net'` hides results whose CNAME alias matches the glob (repeatable), applied after dedupe — ideal for cutting known CDN/alias noise from pipelines
+  - `--max-results 50` caps the rendered rows after dedupe/sort and notes how many were hidden — ideal for keeping huge scans readable; the hidden count is logged and recorded in the JSON `stats` block
   - `--no-wildcard-check` skips the wildcard-detection probes entirely for targets already known to be non-wildcard
   - `--titles` records each live host's HTML `<title>` in a new results column (one extra GET per live row, blank on any failure) — handy for telling lookalike subdomains apart at a glance
   - Redirects are followed and the final URL is recorded: when a probe's redirect chain lands on a different host or path than the subdomain probed, the results gain a `Final URL` column (and a `final_url` field in JSON, `Final URL` column in CSV, `=> URL` suffix in txt) so redirect chains stay visible instead of only the original name. The hop count is recorded too, as a `redirects` field in the JSON output (0 for a direct response, null for DNS-only rows), so long chains and redirect loops stand out without re-fetching; `--resume` carries prior hop counts through
@@ -288,6 +289,7 @@ enumeration control:
                        Keep only results whose HTTP status is in the comma-separated list (e.g. "200,301"); DNS-only rows are dropped; cannot be combined with --exclude-status
   --exclude-ip IPS     Hide results with a resolved IP in the comma-separated IP/CIDR list (e.g. "203.0.113.0/24")
   --exclude-cname GLOB Hide results whose CNAME alias matches the glob (e.g. "*.cloudfront.net"); repeatable, applied after dedupe
+  --max-results N      Cap the rendered rows after dedupe/sort (e.g. "--max-results 50"); extra rows are hidden and the hidden count is logged and recorded in the JSON stats block
   --no-wildcard-check  Skip wildcard detection entirely (for targets already known to be non-wildcard)
   --wildcard-ips IPS   Use these comma-separated wildcard IPs for filtering (e.g. "203.0.113.7,198.51.100.42") instead of running the detection probes; cannot be combined with --no-wildcard-check
   --no-follow-redirects

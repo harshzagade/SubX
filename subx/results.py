@@ -219,6 +219,20 @@ def filter_live_results(results):
     return [row for row in results if is_live_status(row[1])]
 
 
+def cap_results(results, max_results):
+    """Keep at most ``max_results`` rows, in the order given.
+
+    Used by ``--max-results``: rows arrive already deduped and
+    sorted, so the cap keeps the first N rows and reports how many
+    were hidden, so huge scans stay readable. ``None`` means no cap:
+    every row is kept and nothing is hidden.
+    """
+    if max_results is None:
+        return list(results), 0
+    kept = list(results)[:max_results]
+    return kept, len(results) - len(kept)
+
+
 def count_statuses(results):
     """Count rows per HTTP status, for the scan summary.
 
