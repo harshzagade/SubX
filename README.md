@@ -183,7 +183,7 @@ Real terminal capture from SubX v0.1.0 (`subx --help` — the only command that 
 
 ![SubX --help](assets/screenshots/help.png)
 
-A real scan prints a rich results table with columns **Subdomain**, **Status**, **Source** (Passive / Brute / Both), and **IP Addresses**, followed by a summary line (`Finished in Xs. Found N active subdomains.`), per-source counts (`Sources: ...`), and a per-status breakdown (`Statuses: 200: 3, 301: 1, No HTTP: 2`) showing the 200/301/404 makeup at a glance.
+A real scan prints a rich results table with columns **Subdomain**, **Status**, **Source** (Passive / Brute / Both), and **IP Addresses**, followed by a summary line (`Finished in Xs. Found N active subdomains.`), per-phase timings (`Phases: passive 1.23s, brute-force 4.56s, validation 7.89s` — skipped phases are omitted, and a phase interrupted by Ctrl-C still reports the time spent before the interrupt, so a slow scan shows where the time went), per-source counts (`Sources: ...`), and a per-status breakdown (`Statuses: 200: 3, 301: 1, No HTTP: 2`) showing the 200/301/404 makeup at a glance. The JSON output carries the same per-phase timings in its `stats` block as `phase_timings`.
 
 ---
 

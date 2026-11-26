@@ -17,7 +17,7 @@ from .validator import Validator, to_ascii_domain
 from .filters import parse_exclude_patterns, excluded_subdomain
 from .wordlist import load_wordlist, load_words_from_lines, dedupe_case_variants, skip_passive_hits
 from .results import (dedupe_results, sort_results, filter_live_results,
-                      count_statuses, cap_results,
+                      count_statuses, cap_results, format_phase_timings,
                       is_live_status, normalize_subdomain,
                       load_resumed_results,
                       parse_exclude_statuses, filter_excluded_statuses,
@@ -47,7 +47,7 @@ def render_results(console, log, results, found_subdomains, validator,
                    exclude_status=None, exclude_ip=None, titles=None,
                    resumed_count=0, final_urls=None, redirect_counts=None,
                    body_hashes=None, exclude_cname=None,
-                   include_status=None, max_results=None):
+                   include_status=None, max_results=None, phase_timings=None):
     """Display the results table/summary and save the output file.
 
     Shared by the normal end-of-scan path and the KeyboardInterrupt
@@ -84,6 +84,12 @@ def render_results(console, log, results, found_subdomains, validator,
     ``--max-results`` cap: at most that many rows are rendered after
     the other display filters, with the hidden count logged and
     recorded in the JSON ``stats`` block; ``None`` means no cap.
+    ``phase_timings`` maps phase name (``"passive"``,
+    ``"brute-force"``, ``"validation"``) to elapsed seconds; skipped
+    phases are absent, so they stay out of the summary. It is
+    printed as a ``Phases:`` line next to ``Finished in ...`` and
+    carried in the JSON ``stats`` block, so a slow scan shows where
+    the time went.
     """
     duration = time.time() - start_time
     if results:
@@ -241,6 +247,9 @@ def render_results(console, log, results, found_subdomains, validator,
             summary_items = [f"{s}: {c}" for s, c in source_counts.items()]
 
             console.print(f"\n[dim]Finished in {duration:.2f}s. Found {len(results)} active subdomains.[/dim]")
+            phase_line = format_phase_timings(phase_timings)
+            if phase_line:
+                console.print(f"[dim]Phases: {phase_line}[/dim]")
             console.print(f"[dim]Sources: {', '.join(summary_items)}[/dim]")
             console.print(f"[dim]Statuses: {', '.join(f'{s}: {c}' for s, c in status_counts.items())}[/dim]")
             if validator.wildcard_filtered:
@@ -288,6 +297,7 @@ def render_results(console, log, results, found_subdomains, validator,
                             "status_breakdown": status_counts,
                             "wildcard_filtered": getattr(validator, "wildcard_filtered", 0),
                             "dns_cache_hits": getattr(validator, "dns_cache_hits", 0),
+                            "phase_timings": dict(phase_timings or {}),
                             "max_results": max_results,
                             "hidden_by_max_results": hidden_by_max,
                         },
@@ -493,6 +503,16 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
     
     start_time = time.time()
 
+    # Per-phase timings: how long passive enumeration, brute-force,
+    # and validation each took, so a slow scan shows where the time
+    # went. Phases that are skipped (--no-passive / --no-brute) are
+    # never added, so they stay out of the summary. ``current_phase``
+    # tracks the phase in flight so a KeyboardInterrupt can still
+    # close it with the time spent before the interrupt.
+    phase_timings = {}
+    current_phase = None
+    current_phase_start = None
+
     # --only-source names are validated up front so a typo fails fast
     # with exit 2 before any network work, exactly like the other
     # parse helpers above. The Enumerator normalizes them again
@@ -597,7 +617,11 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                 names = ", ".join(Enumerator.SOURCES[k][0]
                                   for k in only_sources)
                 log.info(f"[bold blue]i[/bold blue] Only-source filter: querying {names} only")
+            current_phase, current_phase_start = "passive", time.monotonic()
             passive_subs = enumerator.passive_enumerate()
+            phase_timings["passive"] = round(
+                time.monotonic() - current_phase_start, 2)
+            current_phase = None
             for sub in passive_subs:
                 found_subdomains[sub] = "Passive"
             log.info(f"[bold green]✓[/bold green] Found [white]{len(passive_subs)}[/white] candidates via passive sources")
@@ -608,6 +632,9 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
 
         # 2. Brute Force Enumeration
         if not no_brute:
+            # Timed as a whole phase: wordlist load, case-dedupe,
+            # passive/resume/exclude skips, and the probe run.
+            current_phase, current_phase_start = "brute-force", time.monotonic()
             path = wordlist if wordlist else get_default_wordlist()
             try:
                 if wordlist == "-":
@@ -720,7 +747,11 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                                                 found_subdomains[sub],
                                                 ", ".join(ips),
                                                 alias or ""))
-        
+            if current_phase == "brute-force":
+                phase_timings["brute-force"] = round(
+                    time.monotonic() - current_phase_start, 2)
+                current_phase = None
+
         log.info(f"[bold green]✓[/bold green] Total unique subdomains: [bold white]{len(found_subdomains)}[/bold white]")
 
         # --resume: hosts already validated in the earlier scan are not
@@ -761,6 +792,7 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
             return
 
         # 3. Validation
+        current_phase, current_phase_start = "validation", time.monotonic()
         log.info(f"[bold blue]i[/bold blue] Validating candidates...")
         results = []
         
@@ -801,6 +833,10 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                     if res:
                         results.append(res)
 
+        phase_timings["validation"] = round(
+            time.monotonic() - current_phase_start, 2)
+        current_phase = None
+
         # 4. Results Display
         # Resumed rows join the fresh results here: render_results
         # dedupes/sorts the combined list, so the output lists every
@@ -821,9 +857,16 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                        body_hashes=body_hashes,
                        exclude_cname=exclude_cname,
                        include_status=include_status,
-                       max_results=max_results)
+                       max_results=max_results,
+                       phase_timings=phase_timings)
 
     except KeyboardInterrupt:
+        # A phase interrupted mid-flight still gets its time
+        # recorded: the summary shows how long it ran before the
+        # interrupt, not a missing entry.
+        if current_phase is not None and current_phase not in phase_timings:
+            phase_timings[current_phase] = round(
+                time.monotonic() - current_phase_start, 2)
         # Same merge as the normal path: the output keeps the resumed
         # rows alongside whatever this run validated before the
         # interrupt.
@@ -842,7 +885,8 @@ def main(domain, wordlist, threads, timeout, http_timeout, dns_retries, http_ret
                        body_hashes=body_hashes,
                        exclude_cname=exclude_cname,
                        include_status=include_status,
-                       max_results=max_results)
+                       max_results=max_results,
+                       phase_timings=phase_timings)
         sys.exit(130)
 
 

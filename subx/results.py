@@ -256,6 +256,36 @@ def count_statuses(results):
     return {s: counts[s] for s in sorted(counts, key=_order)}
 
 
+# The scan's phases, in the order they run. ``format_phase_timings``
+# and the JSON ``stats`` block both use this order so the summary
+# always reads passive -> brute-force -> validation.
+PHASE_ORDER = ("passive", "brute-force", "validation")
+
+
+def format_phase_timings(phase_timings):
+    """Format per-phase timings for the scan summary.
+
+    ``phase_timings`` maps phase name to elapsed seconds (float);
+    phases that were skipped (``--no-passive`` / ``--no-brute``) are
+    simply absent, so they never appear in the line. Returns
+    ``"passive 1.23s, brute-force 4.56s, validation 7.89s"`` in
+    canonical phase order, or ``""`` when nothing ran (e.g. a scan
+    that found no candidates and returned before validation).
+    """
+    if not phase_timings:
+        return ""
+    parts = []
+    for name in PHASE_ORDER:
+        if name in phase_timings:
+            parts.append(f"{name} {phase_timings[name]:.2f}s")
+    # Unknown keys (a future phase) still show up, after the known
+    # ones, so new phases are never silently dropped from the line.
+    for name in sorted(phase_timings):
+        if name not in PHASE_ORDER:
+            parts.append(f"{name} {phase_timings[name]:.2f}s")
+    return ", ".join(parts)
+
+
 def _parse_status_codes(value, flag):
     """Shared comma-separated status-code grammar for the status filters.
 
